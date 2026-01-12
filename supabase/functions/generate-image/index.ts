@@ -13,9 +13,10 @@ serve(async (req) => {
   try {
     const { caption, imageStyle, campaignType, visualPrompt } = await req.json();
 
-    if (!caption) {
+    // Accept either visualPrompt (from Layer 2) or caption (fallback)
+    if (!visualPrompt && !caption) {
       return new Response(
-        JSON.stringify({ error: "Missing required field: caption" }),
+        JSON.stringify({ error: "Missing required field: visualPrompt or caption" }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -63,7 +64,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
+        model: "google/gemini-2.5-flash-image",
         messages: [
           {
             role: "user",
