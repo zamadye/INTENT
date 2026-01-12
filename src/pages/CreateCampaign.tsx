@@ -30,7 +30,8 @@ const CreateCampaign: React.FC = () => {
     error,
     generateCampaign,
     regenerateCampaign,
-    updateCaption
+    updateCaption,
+    saveCampaignToDatabase
   } = useCampaignGeneration();
 
   const [campaignData, setCampaignData] = useState<CampaignData>({
@@ -41,6 +42,7 @@ const CreateCampaign: React.FC = () => {
     imageStyle: '',
   });
   const [activeTab, setActiveTab] = useState('create');
+  const [savedCampaignId, setSavedCampaignId] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     if (!isConnected) {
@@ -60,6 +62,20 @@ const CreateCampaign: React.FC = () => {
 
   const handleUpdateCaption = (newCaption: string) => {
     updateCaption(newCaption);
+  };
+
+  const handleMintSuccess = async (tokenId: string, txHash: string) => {
+    // Save campaign to database if not already saved
+    if (!savedCampaignId && address && generatedCampaign) {
+      try {
+        const saved = await saveCampaignToDatabase(campaignData, address);
+        if (saved) {
+          setSavedCampaignId(saved.id);
+        }
+      } catch (err) {
+        console.error('Failed to save campaign:', err);
+      }
+    }
   };
 
   return (
@@ -172,6 +188,8 @@ const CreateCampaign: React.FC = () => {
                   isGenerating={isGenerating}
                   onRegenerate={handleRegenerate}
                   onUpdateCaption={updateCaption}
+                  campaignData={campaignData}
+                  onMintSuccess={handleMintSuccess}
                 />
               </div>
             </motion.div>
@@ -205,6 +223,8 @@ const CreateCampaign: React.FC = () => {
                   isGenerating={isGenerating}
                   onRegenerate={handleRegenerate}
                   onUpdateCaption={updateCaption}
+                  campaignData={campaignData}
+                  onMintSuccess={handleMintSuccess}
                 />
               </TabsContent>
             </Tabs>

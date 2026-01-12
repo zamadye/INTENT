@@ -1,23 +1,35 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Edit3, Coins, Heart, MessageCircle, Repeat2, Share, X } from 'lucide-react';
+import { 
+  RefreshCw, Edit3, Coins, Heart, MessageCircle, Repeat2, Share, 
+  CheckCircle, ExternalLink, Loader2 
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { JazziconAvatar } from '@/components/JazziconAvatar';
 import { useWallet } from '@/contexts/WalletContext';
 import { GeneratedCampaign } from '@/hooks/useCampaignGeneration';
+import { useNFTMinting } from '@/hooks/useNFTMinting';
+import { cn } from '@/lib/utils';
 
 interface CampaignPreviewProps {
   campaign: GeneratedCampaign | null;
   isGenerating: boolean;
   onRegenerate: () => void;
   onUpdateCaption: (caption: string) => void;
+  campaignData?: {
+    campaignType: string;
+    imageStyle: string;
+  };
+  onMintSuccess?: (tokenId: string, txHash: string) => void;
 }
 
 export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
@@ -25,10 +37,24 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
   isGenerating,
   onRegenerate,
   onUpdateCaption,
+  campaignData,
+  onMintSuccess,
 }) => {
-  const { address } = useWallet();
+  const { address, isConnected, isCorrectNetwork, connect, switchNetwork } = useWallet();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editedCaption, setEditedCaption] = useState('');
+  const [showMintSuccess, setShowMintSuccess] = useState(false);
+
+  const {
+    isMinting,
+    mintStatus,
+    mintProgress,
+    tokenId,
+    txHash,
+    error: mintError,
+    mintNFT,
+    MINT_COST_USDC,
+  } = useNFTMinting();
 
   const handleEditOpen = () => {
     if (campaign) {
@@ -40,6 +66,35 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
   const handleEditSave = () => {
     onUpdateCaption(editedCaption);
     setIsEditModalOpen(false);
+  };
+
+  const handleMint = async () => {
+    if (!isConnected) {
+      await connect();
+      return;
+    }
+
+    if (!isCorrectNetwork) {
+      await switchNetwork();
+      return;
+    }
+
+    if (!campaign || !address) return;
+
+    const result = await mintNFT(
+      campaign.id,
+      campaign.caption,
+      campaign.captionHash || '',
+      campaign.imageUrl,
+      campaignData?.campaignType || 'general',
+      campaignData?.imageStyle || 'cyberpunk',
+      address
+    );
+
+    if (result.success && result.tokenId && result.txHash) {
+      setShowMintSuccess(true);
+      onMintSuccess?.(result.tokenId, result.txHash);
+    }
   };
 
   // Empty state
@@ -159,8 +214,34 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
           </div>
         </div>
 
+        {/* Minting Progress */}
+        {isMinting && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 p-4 rounded-lg bg-primary/10 border border-primary/30"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span className="text-sm font-medium">{mintStatus}</span>
+            </div>
+            <Progress value={mintProgress} className="h-2" />
+          </motion.div>
+        )}
+
+        {/* Mint Error */}
+        {mintError && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30"
+          >
+            <p className="text-sm text-destructive">{mintError}</p>
+          </motion.div>
+        )}
+
         {/* Action Buttons */}
-        {campaign && !isGenerating && (
+        {campaign && !isGenerating && !isMinting && !tokenId && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -177,14 +258,63 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
               </Button>
             </div>
             
-            <Button variant="gradient" className="w-full" size="lg">
+            <Button 
+              variant="gradient" 
+              className="w-full" 
+              size="lg"
+              onClick={handleMint}
+              disabled={isMinting}
+            >
               <Coins className="w-5 h-5 mr-2" />
-              Mint as NFT
+              {!isConnected 
+                ? 'Connect Wallet to Mint' 
+                : !isCorrectNetwork 
+                  ? 'Switch to Arc Network' 
+                  : 'Mint as NFT'
+              }
             </Button>
             
             <p className="text-center text-xs text-muted-foreground">
-              Mint Cost: 0.01 USDC + gas
+              Mint Cost: {MINT_COST_USDC} USDC + gas
             </p>
+          </motion.div>
+        )}
+
+        {/* Minted Successfully */}
+        {tokenId && txHash && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 space-y-4"
+          >
+            <div className="p-4 rounded-lg bg-accent/10 border border-accent/30">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="w-5 h-5 text-accent" />
+                <span className="font-medium text-accent">NFT Minted Successfully!</span>
+              </div>
+              <div className="space-y-2 text-sm">
+                <p className="text-muted-foreground">
+                  Token ID: <span className="font-mono text-foreground">{tokenId}</span>
+                </p>
+                <a 
+                  href={`https://testnet.arcscan.app/tx/${txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-primary hover:underline"
+                >
+                  View on ArcScan
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+            
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => window.location.href = '/marketplace'}
+            >
+              View in Marketplace
+            </Button>
           </motion.div>
         )}
       </div>
@@ -194,6 +324,9 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Caption</DialogTitle>
+            <DialogDescription>
+              Customize your campaign caption before minting.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Textarea
@@ -213,6 +346,38 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
                   Save Changes
                 </Button>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mint Success Dialog */}
+      <Dialog open={showMintSuccess} onOpenChange={setShowMintSuccess}>
+        <DialogContent className="text-center">
+          <div className="py-6">
+            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-accent/20 flex items-center justify-center">
+              <CheckCircle className="w-10 h-10 text-accent" />
+            </div>
+            <DialogTitle className="text-2xl mb-2">NFT Minted!</DialogTitle>
+            <DialogDescription className="mb-6">
+              Your campaign has been successfully minted as an NFT on Arc Network.
+            </DialogDescription>
+            
+            <div className="space-y-3">
+              <Button 
+                variant="gradient" 
+                className="w-full"
+                onClick={() => window.location.href = '/marketplace'}
+              >
+                View in Marketplace
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={() => setShowMintSuccess(false)}
+              >
+                Create Another Campaign
+              </Button>
             </div>
           </div>
         </DialogContent>
