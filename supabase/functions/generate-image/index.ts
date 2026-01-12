@@ -36,85 +36,39 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY not configured");
-      return new Response(
-        JSON.stringify({ error: "AI service not configured" }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const POLLINATIONS_API_KEY = Deno.env.get("POLLINATIONS_API_KEY");
+    
+    // Pollinations AI can work without API key for basic usage, but we'll use it if available
+    console.log("Pollinations API key configured:", !!POLLINATIONS_API_KEY);
 
     const stylePrompt = IMAGE_STYLE_PROMPTS[imageStyle] || IMAGE_STYLE_PROMPTS["cyberpunk"];
 
     // Create a comprehensive image prompt
-    const imagePrompt = `Create a 16:9 promotional image for Arc Network blockchain platform.
+    const imagePrompt = `${stylePrompt}, promotional image for Arc Network blockchain platform, based on: ${caption.substring(0, 150)}, colors: ${ARC_BRANDING.colors.join(", ")}, elements: ${ARC_BRANDING.elements.join(", ")}, ${ARC_BRANDING.atmosphere}, no text or words, high quality, professional marketing visual, ultra high resolution, 16:9 aspect ratio`;
 
-STYLE: ${stylePrompt}
+    console.log("Generating image with Pollinations AI, style:", imageStyle);
 
-THEME: Based on this campaign caption: "${caption.substring(0, 200)}"
-
-BRANDING:
-- Use colors: ${ARC_BRANDING.colors.join(", ")}
-- Include elements like: ${ARC_BRANDING.elements.join(", ")}
-- Overall atmosphere: ${ARC_BRANDING.atmosphere}
-
-REQUIREMENTS:
-- No text or words in the image
-- High quality, professional marketing visual
-- Suitable for social media (Twitter/X)
-- Ultra high resolution
-- Visually striking and shareable
-
-Campaign type: ${campaignType || "general promotion"}`;
-
-    console.log("Generating image with style:", imageStyle);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [
-          { role: "user", content: imagePrompt }
-        ],
-        modalities: ["image", "text"]
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits." }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      return new Response(
-        JSON.stringify({ error: "Image generation failed" }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Pollinations AI Image Generation endpoint
+    // Using text-to-image endpoint with proper encoding
+    const encodedPrompt = encodeURIComponent(imagePrompt);
+    
+    // Build URL with parameters
+    let pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=576&nologo=true&seed=${Date.now()}`;
+    
+    // Add API key if available
+    if (POLLINATIONS_API_KEY) {
+      pollinationsUrl += `&token=${POLLINATIONS_API_KEY}`;
     }
 
-    const data = await response.json();
+    console.log("Pollinations URL generated");
+
+    // Verify the image can be accessed by making a HEAD request
+    const checkResponse = await fetch(pollinationsUrl, { method: 'HEAD' });
     
-    // Extract image from response
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    
-    if (!imageUrl) {
-      console.error("No image generated:", JSON.stringify(data).substring(0, 500));
+    if (!checkResponse.ok) {
+      console.error("Pollinations API error:", checkResponse.status);
       return new Response(
-        JSON.stringify({ error: "Failed to generate image" }),
+        JSON.stringify({ error: "Image generation failed" }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -123,7 +77,7 @@ Campaign type: ${campaignType || "general promotion"}`;
 
     return new Response(
       JSON.stringify({ 
-        imageUrl,
+        imageUrl: pollinationsUrl,
         metadata: {
           style: imageStyle,
           generatedAt: new Date().toISOString()

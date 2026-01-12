@@ -77,9 +77,11 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    const ANTHROPIC_BASE_URL = Deno.env.get("ANTHROPIC_BASE_URL") || "https://api.z.ai/api/anthropic";
+    
+    if (!ANTHROPIC_API_KEY) {
+      console.error("ANTHROPIC_API_KEY not configured");
       return new Response(
         JSON.stringify({ error: "AI service not configured" }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -125,47 +127,54 @@ CAMPAIGN TYPE: ${CAMPAIGN_TYPE_PROMPTS[campaignType] || "Create engaging content
       : "Create a unique, engaging campaign caption that stands out";
 
     console.log("Generating caption for campaign type:", campaignType);
+    console.log("Using Z.AI Anthropic API at:", ANTHROPIC_BASE_URL);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Call Z.AI Anthropic API
+    const response = await fetch(`${ANTHROPIC_BASE_URL}/v1/messages`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
         "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 300,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
-        ],
-        temperature: 0.9, // Higher temperature for more variety
-        max_tokens: 300
+        ]
       }),
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Z.AI API error:", response.status, errorText);
+      
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      if (response.status === 402) {
+      if (response.status === 401) {
         return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits." }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: "Invalid API key configuration" }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      
       return new Response(
-        JSON.stringify({ error: "AI service error" }),
+        JSON.stringify({ error: "AI service error", details: errorText }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const data = await response.json();
-    const caption = data.choices?.[0]?.message?.content?.trim();
+    console.log("Z.AI response:", JSON.stringify(data).substring(0, 500));
+    
+    // Extract caption from Anthropic response format
+    const caption = data.content?.[0]?.text?.trim();
 
     if (!caption) {
       console.error("No caption generated:", data);
