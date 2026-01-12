@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
-import { Zap, Users, Activity } from 'lucide-react';
+import { Target, Users, Activity } from 'lucide-react';
 
 interface StatItemProps {
   icon: React.ReactNode;
@@ -63,7 +63,7 @@ const StatItem: React.FC<StatItemProps> = ({ icon, value, suffix, label, delay }
 export const StatsSection: React.FC = () => {
   const stats = [
     {
-      icon: <Zap className="w-6 h-6 text-primary-foreground" />,
+      icon: <Target className="w-6 h-6 text-primary-foreground" />,
       value: 128,
       suffix: '+',
       label: 'Active Campaigns',
@@ -73,7 +73,7 @@ export const StatsSection: React.FC = () => {
       icon: <Users className="w-6 h-6 text-primary-foreground" />,
       value: 1245,
       suffix: '+',
-      label: 'Total Mints',
+      label: 'Completed Intents',
       delay: 0.1,
     },
     {

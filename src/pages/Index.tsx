@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles, Shield, Gem, Zap, Users, Clock } from 'lucide-react';
+import { ArrowRight, Sparkles, Shield, Zap, Target, Fingerprint, Key } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
@@ -40,8 +40,8 @@ const Index = () => {
               transition={{ delay: 0.2 }}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border border-primary/30 mb-8"
             >
-              <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium">AI-Powered Campaign Builder</span>
+              <Target className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium">Proof of Structured Participation</span>
             </motion.div>
 
             {/* Headline */}
@@ -51,7 +51,7 @@ const Index = () => {
               transition={{ delay: 0.3 }}
               className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight"
             >
-              Turn Your Voice Into{' '}
+              Turn Your Actions Into{' '}
               <span className="text-gradient">On-Chain Proof</span>
             </motion.h1>
 
@@ -62,8 +62,8 @@ const Index = () => {
               transition={{ delay: 0.4 }}
               className="text-lg sm:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto"
             >
-              AI-powered campaign builder for Arc Network testnet warriors. 
-              Create, generate, and mint your campaigns as unique NFTs.
+              Structured intent platform for Arc Network testnet. 
+              Create campaigns, define your actions, and generate verifiable proofs.
             </motion.p>
 
             {/* CTAs */}
@@ -75,12 +75,12 @@ const Index = () => {
             >
               <Button variant="hero" size="xl" asChild>
                 <Link to="/create">
-                  Create Campaign
+                  Start Creating
                   <ArrowRight className="w-5 h-5 ml-1" />
                 </Link>
               </Button>
               <Button variant="hero-ghost" size="xl" asChild>
-                <Link to="/gallery">View Gallery</Link>
+                <Link to="/proofs">View Proofs</Link>
               </Button>
             </motion.div>
 

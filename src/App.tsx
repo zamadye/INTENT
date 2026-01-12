@@ -7,9 +7,10 @@ import { Toaster as HotToaster } from "react-hot-toast";
 import { WagmiProvider } from "wagmi";
 import { config, initWeb3Modal } from "@/lib/wagmi";
 import { WalletProvider } from "@/contexts/WalletContext";
+import { AccessLevelProvider } from "@/contexts/AccessLevelContext";
 import Index from "./pages/Index";
 import CreateCampaign from "./pages/CreateCampaign";
-import Marketplace from "./pages/Marketplace";
+import Proofs from "./pages/Proofs";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 
@@ -23,27 +24,32 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WalletProvider>
-          <Toaster />
-          <Sonner />
-          <HotToaster
-            position="top-right"
-            toastOptions={{
-              style: {
-                background: 'hsl(231 50% 12%)',
-                color: 'hsl(210 40% 98%)',
-                border: '1px solid hsl(231 40% 20%)',
-              },
-            }}
-          />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/create" element={<CreateCampaign />} />
-              <Route path="/marketplace" element={<Marketplace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          <AccessLevelProvider>
+            <Toaster />
+            <Sonner />
+            <HotToaster
+              position="top-right"
+              toastOptions={{
+                style: {
+                  background: 'hsl(231 50% 12%)',
+                  color: 'hsl(210 40% 98%)',
+                  border: '1px solid hsl(231 40% 20%)',
+                },
+              }}
+            />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/create" element={<CreateCampaign />} />
+                <Route path="/proofs" element={<Proofs />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                {/* Legacy route redirect */}
+                <Route path="/marketplace" element={<Proofs />} />
+                <Route path="/gallery" element={<Proofs />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </AccessLevelProvider>
         </WalletProvider>
       </TooltipProvider>
     </QueryClientProvider>

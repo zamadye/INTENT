@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Twitter, FileText, ExternalLink } from 'lucide-react';
+import { Twitter, FileText, ExternalLink, Info } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
@@ -11,13 +11,13 @@ export const Footer: React.FC = () => {
           <div className="md:col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-cyber-gradient flex items-center justify-center">
-                <span className="font-display font-bold text-primary-foreground text-sm">A</span>
+                <span className="font-display font-bold text-primary-foreground text-sm">I</span>
               </div>
-              <span className="font-display font-bold text-lg">Arc Campaign Engine</span>
+              <span className="font-display font-bold text-lg">INTENT</span>
             </Link>
             <p className="text-muted-foreground text-sm max-w-md mb-4">
-              AI-powered campaign builder for Arc Network. Create engaging on-chain proofs 
-              and mint them as NFTs on the Arc testnet.
+              Proof of Structured Participation on Arc Network. Create structured intents 
+              and generate verifiable on-chain proofs of your actions.
             </p>
             <div className="flex items-center gap-2">
               <span className="px-3 py-1 text-xs font-medium rounded-full bg-usdc/20 text-usdc border border-usdc/30">
@@ -34,8 +34,8 @@ export const Footer: React.FC = () => {
             <h4 className="font-display font-semibold mb-4">Quick Links</h4>
             <ul className="space-y-2">
               <li>
-                <Link to="/gallery" className="text-muted-foreground hover:text-primary transition-colors text-sm">
-                  Gallery
+                <Link to="/proofs" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                  Intent Proofs
                 </Link>
               </li>
               <li>
@@ -99,9 +99,20 @@ export const Footer: React.FC = () => {
           </div>
         </div>
 
-        <div className="border-t border-border/30 mt-8 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+        {/* Disclaimer */}
+        <div className="border-t border-border/30 mt-8 pt-6">
+          <div className="flex items-start gap-2 p-4 rounded-lg bg-muted/30 border border-border/50 mb-6">
+            <Info className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              <strong>Disclaimer:</strong> INTENT Proofs are records of structured participation, not financial assets. 
+              They have no promised value and should not be purchased or sold for speculative purposes.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-muted-foreground text-sm">
-            © 2024 Arc Campaign Engine. All rights reserved.
+            © 2025 INTENT. Proof of Structured Participation.
           </p>
           <div className="flex items-center gap-4">
             <span className="text-muted-foreground text-xs">

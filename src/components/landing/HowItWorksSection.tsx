@@ -1,31 +1,31 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { PenLine, Sparkles, Coins, Share2 } from 'lucide-react';
+import { PenLine, Sparkles, Target, CheckCircle } from 'lucide-react';
 
 const steps = [
   {
     number: '01',
     icon: PenLine,
-    title: 'Create',
-    description: 'Choose your campaign type, tone, and what Arc features to highlight.',
+    title: 'Define Intent',
+    description: 'Select your intent category, target dApps, and define your action sequence.',
   },
   {
     number: '02',
     icon: Sparkles,
-    title: 'Generate',
-    description: 'AI creates unique caption and image based on your specifications.',
+    title: 'Generate Content',
+    description: 'AI creates unique content based on your structured intent and Arc context.',
   },
   {
     number: '03',
-    icon: Coins,
-    title: 'Mint',
-    description: 'Pay a small USDC fee to mint your campaign as an NFT on Arc.',
+    icon: Target,
+    title: 'Complete Campaign',
+    description: 'Lock your intent and generate a behavioral fingerprint automatically.',
   },
   {
     number: '04',
-    icon: Share2,
-    title: 'Share',
-    description: 'Share your on-chain campaign with the world and build your presence.',
+    icon: CheckCircle,
+    title: 'Proof Created',
+    description: 'Your proof is recorded on-chain, unlocking advanced platform capabilities.',
   },
 ];
 
@@ -46,7 +46,7 @@ export const HowItWorksSection: React.FC = () => {
             How It Works
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            From idea to on-chain proof in just four simple steps.
+            From structured intent to on-chain proof in just four simple steps.
           </p>
         </motion.div>
 

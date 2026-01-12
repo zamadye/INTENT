@@ -8,8 +8,8 @@ import { JazziconAvatar } from '@/components/JazziconAvatar';
 import toast from 'react-hot-toast';
 
 const navLinks = [
-  { href: '/marketplace', label: 'Marketplace' },
-  { href: '/create', label: 'Create Campaign' },
+  { href: '/proofs', label: 'Proofs' },
+  { href: '/create', label: 'Create' },
   { href: '/dashboard', label: 'Dashboard' },
 ];
 
@@ -65,10 +65,10 @@ export const Navbar: React.FC = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
             <div className="w-8 h-8 rounded-lg bg-cyber-gradient flex items-center justify-center shadow-lg group-hover:shadow-[0_0_20px_hsl(189_100%_50%/0.4)] transition-shadow">
-              <span className="font-display font-bold text-primary-foreground text-sm">A</span>
+              <span className="font-display font-bold text-primary-foreground text-sm">I</span>
             </div>
             <span className="font-display font-bold text-lg text-foreground hidden sm:block">
-              Arc Campaign
+              INTENT
             </span>
           </Link>
 

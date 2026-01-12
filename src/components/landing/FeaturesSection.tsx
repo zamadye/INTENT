@@ -1,24 +1,24 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Bot, Link2, Gem } from 'lucide-react';
+import { Bot, Fingerprint, Key } from 'lucide-react';
 
 const features = [
   {
     icon: Bot,
-    title: 'AI Generation',
-    description: 'Powered by advanced AI models to create unique, engaging campaign content tailored for Arc Network.',
+    title: 'AI-Powered Orchestration',
+    description: 'Advanced AI models create unique, contextual campaign content tailored for Arc Network ecosystem.',
     gradient: 'from-primary to-cyan-glow',
   },
   {
-    icon: Link2,
-    title: 'On-Chain Proof',
-    description: 'Every campaign is permanently recorded on Arc Network testnet, creating verifiable on-chain proof.',
+    icon: Fingerprint,
+    title: 'Behavioral Fingerprinting',
+    description: 'Every structured intent is hashed and recorded, creating a verifiable fingerprint of your participation.',
     gradient: 'from-usdc to-usdc-glow',
   },
   {
-    icon: Gem,
-    title: 'NFT Minting',
-    description: 'Mint your campaigns as unique NFTs. Each piece becomes a collectible on the Arc blockchain.',
+    icon: Key,
+    title: 'Intent Verification',
+    description: 'Proofs serve as access keys to unlock advanced features - not collectibles, but capability expanders.',
     gradient: 'from-primary to-usdc',
   },
 ];
@@ -37,7 +37,7 @@ export const FeaturesSection: React.FC = () => {
             Powerful Features
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Everything you need to create, mint, and share your campaigns on Arc Network.
+            Everything you need to create structured intents and generate verifiable proofs on Arc Network.
           </p>
         </motion.div>
 
