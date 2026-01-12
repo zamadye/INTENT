@@ -14,7 +14,134 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      campaigns: {
+        Row: {
+          arc_context: string[]
+          campaign_type: string
+          caption: string
+          caption_hash: string
+          created_at: string
+          custom_input: string | null
+          id: string
+          image_status: string
+          image_style: string
+          image_url: string | null
+          status: string
+          tones: string[]
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          arc_context?: string[]
+          campaign_type: string
+          caption: string
+          caption_hash: string
+          created_at?: string
+          custom_input?: string | null
+          id?: string
+          image_status?: string
+          image_style: string
+          image_url?: string | null
+          status?: string
+          tones?: string[]
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          arc_context?: string[]
+          campaign_type?: string
+          caption?: string
+          caption_hash?: string
+          created_at?: string
+          custom_input?: string | null
+          id?: string
+          image_status?: string
+          image_style?: string
+          image_url?: string | null
+          status?: string
+          tones?: string[]
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      nfts: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          id: string
+          metadata_hash: string | null
+          mint_cost: number | null
+          minted_at: string | null
+          status: string
+          token_id: string | null
+          tx_hash: string | null
+          wallet_address: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          id?: string
+          metadata_hash?: string | null
+          mint_cost?: number | null
+          minted_at?: string | null
+          status?: string
+          token_id?: string | null
+          tx_hash?: string | null
+          wallet_address: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          id?: string
+          metadata_hash?: string | null
+          mint_cost?: number | null
+          minted_at?: string | null
+          status?: string
+          token_id?: string | null
+          tx_hash?: string | null
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          campaigns_created: number
+          created_at: string
+          id: string
+          nfts_minted: number
+          updated_at: string
+          username: string | null
+          wallet_address: string
+        }
+        Insert: {
+          campaigns_created?: number
+          created_at?: string
+          id?: string
+          nfts_minted?: number
+          updated_at?: string
+          username?: string | null
+          wallet_address: string
+        }
+        Update: {
+          campaigns_created?: number
+          created_at?: string
+          id?: string
+          nfts_minted?: number
+          updated_at?: string
+          username?: string | null
+          wallet_address?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

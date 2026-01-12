@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { AlertCircle, Wallet } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { CampaignForm } from '@/components/campaign/CampaignForm';
 import { CampaignPreview } from '@/components/campaign/CampaignPreview';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useCampaignGeneration } from '@/hooks/useCampaignGeneration';
+import { useWallet } from '@/contexts/WalletContext';
 
 export interface CampaignData {
   campaignType: string;
@@ -14,14 +19,20 @@ export interface CampaignData {
   imageStyle: string;
 }
 
-export interface GeneratedCampaign {
-  id: string;
-  caption: string;
-  imageUrl: string | null;
-  imageStatus: 'pending' | 'generating' | 'completed' | 'failed';
-}
+// Re-export GeneratedCampaign from hook for backward compatibility
+export type { GeneratedCampaign } from '@/hooks/useCampaignGeneration';
 
 const CreateCampaign: React.FC = () => {
+  const { isConnected, address, connect, isConnecting, isCorrectNetwork, switchNetwork } = useWallet();
+  const {
+    isGenerating,
+    generatedCampaign,
+    error,
+    generateCampaign,
+    regenerateCampaign,
+    updateCaption
+  } = useCampaignGeneration();
+
   const [campaignData, setCampaignData] = useState<CampaignData>({
     campaignType: '',
     tones: [],
@@ -29,43 +40,26 @@ const CreateCampaign: React.FC = () => {
     customInput: '',
     imageStyle: '',
   });
-  const [generatedCampaign, setGeneratedCampaign] = useState<GeneratedCampaign | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState('create');
 
   const handleGenerate = async () => {
-    setIsGenerating(true);
-    
-    // Simulate AI generation for now
-    setTimeout(() => {
-      setGeneratedCampaign({
-        id: `campaign-${Date.now()}`,
-        caption: `🚀 Just discovered the power of Arc Network! With USDC gas fees and sub-second finality, this is what the future of blockchain looks like. The Malachite consensus is a game-changer. Ready to build on Arc Testnet? #ArcNetwork #Web3 #DeFi`,
-        imageUrl: null,
-        imageStatus: 'generating',
-      });
-      
-      // Simulate image generation
-      setTimeout(() => {
-        setGeneratedCampaign(prev => prev ? {
-          ...prev,
-          imageUrl: 'https://picsum.photos/seed/arc-campaign/1200/675',
-          imageStatus: 'completed',
-        } : null);
-        setIsGenerating(false);
-      }, 2000);
-    }, 1500);
-  };
-
-  const handleRegenerate = () => {
-    setGeneratedCampaign(null);
-    handleGenerate();
-  };
-
-  const updateCaption = (newCaption: string) => {
-    if (generatedCampaign) {
-      setGeneratedCampaign({ ...generatedCampaign, caption: newCaption });
+    if (!isConnected) {
+      await connect();
+      return;
     }
+    if (!isCorrectNetwork) {
+      await switchNetwork();
+      return;
+    }
+    await generateCampaign(campaignData, address);
+  };
+
+  const handleRegenerate = async () => {
+    await regenerateCampaign(campaignData, address);
+  };
+
+  const handleUpdateCaption = (newCaption: string) => {
+    updateCaption(newCaption);
   };
 
   return (
@@ -88,6 +82,69 @@ const CreateCampaign: React.FC = () => {
               generate content, and mint it as an NFT.
             </p>
           </motion.div>
+
+          {/* Wallet Connection Alert */}
+          {!isConnected && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8"
+            >
+              <Alert className="border-primary/50 bg-primary/10">
+                <Wallet className="h-4 w-4 text-primary" />
+                <AlertDescription className="flex items-center justify-between">
+                  <span>Connect your wallet to create campaigns and mint NFTs on Arc Network.</span>
+                  <Button
+                    variant="gradient"
+                    size="sm"
+                    onClick={connect}
+                    disabled={isConnecting}
+                    className="ml-4"
+                  >
+                    {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
+
+          {/* Network Warning */}
+          {isConnected && !isCorrectNetwork && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8"
+            >
+              <Alert className="border-destructive/50 bg-destructive/10">
+                <AlertCircle className="h-4 w-4 text-destructive" />
+                <AlertDescription className="flex items-center justify-between">
+                  <span>Please switch to Arc Testnet to continue.</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={switchNetwork}
+                    className="ml-4"
+                  >
+                    Switch Network
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
+
+          {/* Error Alert */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8"
+            >
+              <Alert className="border-destructive/50 bg-destructive/10">
+                <AlertCircle className="h-4 w-4 text-destructive" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
 
           {/* Desktop Layout */}
           <div className="hidden lg:grid lg:grid-cols-5 gap-8">

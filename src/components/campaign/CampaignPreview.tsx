@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { JazziconAvatar } from '@/components/JazziconAvatar';
 import { useWallet } from '@/contexts/WalletContext';
-import { GeneratedCampaign } from '@/pages/CreateCampaign';
+import { GeneratedCampaign } from '@/hooks/useCampaignGeneration';
 
 interface CampaignPreviewProps {
   campaign: GeneratedCampaign | null;
