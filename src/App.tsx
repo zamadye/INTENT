@@ -9,7 +9,7 @@ import { config, initWeb3Modal } from "@/lib/wagmi";
 import { WalletProvider } from "@/contexts/WalletContext";
 import Index from "./pages/Index";
 import CreateCampaign from "./pages/CreateCampaign";
-import Gallery from "./pages/Gallery";
+import Marketplace from "./pages/Marketplace";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 
@@ -39,7 +39,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/create" element={<CreateCampaign />} />
-              <Route path="/gallery" element={<Gallery />} />
+              <Route path="/marketplace" element={<Marketplace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

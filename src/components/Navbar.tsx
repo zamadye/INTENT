@@ -8,7 +8,7 @@ import { JazziconAvatar } from '@/components/JazziconAvatar';
 import toast from 'react-hot-toast';
 
 const navLinks = [
-  { href: '/gallery', label: 'Gallery' },
+  { href: '/marketplace', label: 'Marketplace' },
   { href: '/create', label: 'Create Campaign' },
   { href: '/dashboard', label: 'Dashboard' },
 ];

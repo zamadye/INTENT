@@ -65,41 +65,162 @@ export type Database = {
         }
         Relationships: []
       }
-      nfts: {
+      marketplace_stats: {
         Row: {
-          campaign_id: string
-          created_at: string
+          avg_price: number | null
+          floor_price: number | null
           id: string
-          metadata_hash: string | null
-          mint_cost: number | null
-          minted_at: string | null
-          status: string
-          token_id: string | null
+          total_listed: number | null
+          total_sales: number | null
+          total_volume: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          avg_price?: number | null
+          floor_price?: number | null
+          id?: string
+          total_listed?: number | null
+          total_sales?: number | null
+          total_volume?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          avg_price?: number | null
+          floor_price?: number | null
+          id?: string
+          total_listed?: number | null
+          total_sales?: number | null
+          total_volume?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      marketplace_transactions: {
+        Row: {
+          buyer_address: string
+          created_at: string | null
+          id: string
+          nft_id: string
+          price: number
+          seller_address: string
           tx_hash: string | null
+        }
+        Insert: {
+          buyer_address: string
+          created_at?: string | null
+          id?: string
+          nft_id: string
+          price: number
+          seller_address: string
+          tx_hash?: string | null
+        }
+        Update: {
+          buyer_address?: string
+          created_at?: string | null
+          id?: string
+          nft_id?: string
+          price?: number
+          seller_address?: string
+          tx_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_transactions_nft_id_fkey"
+            columns: ["nft_id"]
+            isOneToOne: false
+            referencedRelation: "nfts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nft_likes: {
+        Row: {
+          created_at: string | null
+          id: string
+          nft_id: string
           wallet_address: string
         }
         Insert: {
-          campaign_id: string
-          created_at?: string
+          created_at?: string | null
           id?: string
-          metadata_hash?: string | null
-          mint_cost?: number | null
-          minted_at?: string | null
-          status?: string
-          token_id?: string | null
-          tx_hash?: string | null
+          nft_id: string
           wallet_address: string
         }
         Update: {
-          campaign_id?: string
+          created_at?: string | null
+          id?: string
+          nft_id?: string
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nft_likes_nft_id_fkey"
+            columns: ["nft_id"]
+            isOneToOne: false
+            referencedRelation: "nfts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfts: {
+        Row: {
+          buyer_address: string | null
+          campaign_id: string
+          created_at: string
+          id: string
+          is_listed: boolean | null
+          likes_count: number | null
+          listed_at: string | null
+          listing_price: number | null
+          metadata_hash: string | null
+          mint_cost: number | null
+          minted_at: string | null
+          seller_address: string | null
+          sold_at: string | null
+          status: string
+          token_id: string | null
+          tx_hash: string | null
+          views_count: number | null
+          wallet_address: string
+        }
+        Insert: {
+          buyer_address?: string | null
+          campaign_id: string
           created_at?: string
           id?: string
+          is_listed?: boolean | null
+          likes_count?: number | null
+          listed_at?: string | null
+          listing_price?: number | null
           metadata_hash?: string | null
           mint_cost?: number | null
           minted_at?: string | null
+          seller_address?: string | null
+          sold_at?: string | null
           status?: string
           token_id?: string | null
           tx_hash?: string | null
+          views_count?: number | null
+          wallet_address: string
+        }
+        Update: {
+          buyer_address?: string | null
+          campaign_id?: string
+          created_at?: string
+          id?: string
+          is_listed?: boolean | null
+          likes_count?: number | null
+          listed_at?: string | null
+          listing_price?: number | null
+          metadata_hash?: string | null
+          mint_cost?: number | null
+          minted_at?: string | null
+          seller_address?: string | null
+          sold_at?: string | null
+          status?: string
+          token_id?: string | null
+          tx_hash?: string | null
+          views_count?: number | null
           wallet_address?: string
         }
         Relationships: [
