@@ -19,6 +19,11 @@ import { useWallet } from '@/contexts/WalletContext';
 import { GeneratedCampaign } from '@/hooks/useCampaignGeneration';
 import { CampaignData } from '@/pages/CreateCampaign';
 import { cn } from '@/lib/utils';
+import { 
+  ArtifactFreezeGuard, 
+  FreezeWarningBanner, 
+  EditAttemptWarning 
+} from './ArtifactFreezeGuard';
 
 interface CampaignPreviewProps {
   campaign: GeneratedCampaign | null;
@@ -29,6 +34,7 @@ interface CampaignPreviewProps {
   onComplete?: () => void;
   isCompleting?: boolean;
   completedCampaignId?: string | null;
+  campaignStatus?: string;
 }
 
 export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
@@ -40,11 +46,16 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
   onComplete,
   isCompleting,
   completedCampaignId,
+  campaignStatus = 'draft',
 }) => {
   const { address, isConnected, isCorrectNetwork, connect, switchNetwork } = useWallet();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editedCaption, setEditedCaption] = useState('');
   const [showCompletionSuccess, setShowCompletionSuccess] = useState(false);
+  const [showEditWarning, setShowEditWarning] = useState(false);
+
+  // Determine if content is frozen (finalized or shared)
+  const isFrozen = campaignStatus === 'finalized' || campaignStatus === 'shared' || !!completedCampaignId;
 
   // Check if intent fields are complete
   const isIntentComplete = campaignData && 
@@ -53,10 +64,24 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
     campaignData.actionOrder.length >= 3;
 
   const handleEditOpen = () => {
+    // Block editing if content is frozen
+    if (isFrozen) {
+      setShowEditWarning(true);
+      return;
+    }
     if (campaign) {
       setEditedCaption(campaign.caption);
       setIsEditModalOpen(true);
     }
+  };
+
+  const handleRegenerate = () => {
+    // Block regeneration if content is frozen
+    if (isFrozen) {
+      setShowEditWarning(true);
+      return;
+    }
+    onRegenerate();
   };
 
   const handleEditSave = () => {
@@ -122,9 +147,17 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-display font-semibold">Preview</h3>
           {campaign && (
-            <span className="text-xs text-accent font-medium">Live Preview</span>
+            <span className={cn(
+              "text-xs font-medium",
+              isFrozen ? "text-accent" : "text-primary"
+            )}>
+              {isFrozen ? '🔒 Locked' : 'Live Preview'}
+            </span>
           )}
         </div>
+
+        {/* Freeze warning banner */}
+        <FreezeWarningBanner isFrozen={isFrozen} status={campaignStatus} />
 
         {/* Mock Tweet Card */}
         <div className="bg-space-dark rounded-xl p-4 border border-border/30">
@@ -272,18 +305,18 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
         )}
 
         {/* Action Buttons */}
-        {campaign && !isGenerating && !isCompleting && !completedCampaignId && (
+        {campaign && !isGenerating && !isCompleting && !completedCampaignId && !isFrozen && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="mt-6 space-y-3"
           >
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={onRegenerate}>
+              <Button variant="outline" className="flex-1" onClick={handleRegenerate} disabled={isFrozen}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Regenerate
               </Button>
-              <Button variant="outline" className="flex-1" onClick={handleEditOpen}>
+              <Button variant="outline" className="flex-1" onClick={handleEditOpen} disabled={isFrozen}>
                 <Edit3 className="w-4 h-4 mr-2" />
                 Edit Caption
               </Button>
@@ -447,6 +480,12 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Edit attempt warning for frozen content */}
+      <EditAttemptWarning 
+        show={showEditWarning} 
+        onDismiss={() => setShowEditWarning(false)} 
+      />
     </>
   );
 };

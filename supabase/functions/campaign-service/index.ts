@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyMessage } from "https://esm.sh/viem@2.44.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,6 +31,11 @@ interface CampaignIntent {
   timeWindow: 'none' | '24h' | '1week' | '1month';
 }
 
+interface SiwePayload {
+  message: string;
+  signature: string;
+}
+
 // Validation helpers
 function isStateTransitionValid(from: CampaignState, to: CampaignState): boolean {
   const validTransitions: Record<CampaignState, CampaignState[]> = {
@@ -57,6 +63,50 @@ function generateIntentFingerprint(intent: CampaignIntent): string {
     hash = hash & hash;
   }
   return `0x${Math.abs(hash).toString(16).padStart(16, '0')}`;
+}
+
+// SIWE verification helper
+async function verifySiweSignature(
+  siwe: SiwePayload,
+  expectedAddress: string
+): Promise<{ valid: boolean; error?: string }> {
+  try {
+    // Parse the SIWE message to extract the address
+    const addressMatch = siwe.message.match(/0x[a-fA-F0-9]{40}/);
+    if (!addressMatch) {
+      return { valid: false, error: 'Invalid SIWE message format' };
+    }
+    
+    const messageAddress = addressMatch[0].toLowerCase();
+    if (messageAddress !== expectedAddress.toLowerCase()) {
+      return { valid: false, error: 'Address mismatch in SIWE message' };
+    }
+
+    // Check expiration if present
+    const expirationMatch = siwe.message.match(/Expiration Time: (.+)/);
+    if (expirationMatch) {
+      const expirationTime = new Date(expirationMatch[1]);
+      if (expirationTime < new Date()) {
+        return { valid: false, error: 'SIWE message expired' };
+      }
+    }
+
+    // Verify the signature using viem
+    const isValid = await verifyMessage({
+      address: expectedAddress as `0x${string}`,
+      message: siwe.message,
+      signature: siwe.signature as `0x${string}`,
+    });
+
+    if (!isValid) {
+      return { valid: false, error: 'Invalid signature' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error('[SIWE] Verification error:', error);
+    return { valid: false, error: 'Signature verification failed' };
+  }
 }
 
 serve(async (req) => {
@@ -148,13 +198,26 @@ serve(async (req) => {
         }
 
         const body = await req.json();
-        const { campaignId, fromState, toState, walletAddress } = body;
+        const { campaignId, fromState, toState, walletAddress, siwe } = body;
 
         if (!campaignId || !fromState || !toState || !walletAddress) {
           return new Response(JSON.stringify({ error: 'Missing required fields (campaignId, fromState, toState, walletAddress)' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
+        }
+
+        // SIWE verification for state transitions (optional but recommended for sensitive operations)
+        if (siwe) {
+          const siweResult = await verifySiweSignature(siwe, walletAddress);
+          if (!siweResult.valid) {
+            console.warn(`[CampaignService] SIWE verification failed: ${siweResult.error}`);
+            return new Response(JSON.stringify({ error: `Authentication failed: ${siweResult.error}` }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.log(`[CampaignService] SIWE verified for wallet: ${walletAddress}`);
         }
 
         // Validate state transition

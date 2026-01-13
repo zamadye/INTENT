@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyMessage } from "https://esm.sh/viem@2.44.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +27,52 @@ const FORBIDDEN_CLAIMS = [
   'financial advice',
   'investment advice'
 ];
+
+interface SiwePayload {
+  message: string;
+  signature: string;
+}
+
+// SIWE verification helper
+async function verifySiweSignature(
+  siwe: SiwePayload,
+  expectedAddress: string
+): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const addressMatch = siwe.message.match(/0x[a-fA-F0-9]{40}/);
+    if (!addressMatch) {
+      return { valid: false, error: 'Invalid SIWE message format' };
+    }
+    
+    const messageAddress = addressMatch[0].toLowerCase();
+    if (messageAddress !== expectedAddress.toLowerCase()) {
+      return { valid: false, error: 'Address mismatch in SIWE message' };
+    }
+
+    const expirationMatch = siwe.message.match(/Expiration Time: (.+)/);
+    if (expirationMatch) {
+      const expirationTime = new Date(expirationMatch[1]);
+      if (expirationTime < new Date()) {
+        return { valid: false, error: 'SIWE message expired' };
+      }
+    }
+
+    const isValid = await verifyMessage({
+      address: expectedAddress as `0x${string}`,
+      message: siwe.message,
+      signature: siwe.signature as `0x${string}`,
+    });
+
+    if (!isValid) {
+      return { valid: false, error: 'Invalid signature' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error('[SIWE] Verification error:', error);
+    return { valid: false, error: 'Signature verification failed' };
+  }
+}
 
 // Generate SHA-256 hash
 async function generateHash(content: string): Promise<string> {
@@ -105,13 +152,26 @@ serve(async (req) => {
         }
 
         const body = await req.json();
-        const { campaignId, rawCaption, targetDApps, walletAddress } = body;
+        const { campaignId, rawCaption, targetDApps, walletAddress, siwe } = body;
 
         if (!campaignId || !rawCaption || !walletAddress) {
           return new Response(JSON.stringify({ error: 'Campaign ID, raw caption, and wallet address required' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
+        }
+
+        // Optional SIWE verification for enhanced security
+        if (siwe) {
+          const siweResult = await verifySiweSignature(siwe, walletAddress);
+          if (!siweResult.valid) {
+            console.warn(`[ArtifactService] SIWE verification failed: ${siweResult.error}`);
+            return new Response(JSON.stringify({ error: `Authentication failed: ${siweResult.error}` }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.log(`[ArtifactService] SIWE verified for wallet: ${walletAddress}`);
         }
 
         // Get campaign to verify ownership
@@ -195,13 +255,26 @@ serve(async (req) => {
         }
 
         const body = await req.json();
-        const { campaignId, imageUrl, walletAddress } = body;
+        const { campaignId, imageUrl, walletAddress, siwe } = body;
 
         if (!campaignId || !walletAddress) {
           return new Response(JSON.stringify({ error: 'Campaign ID and wallet address required' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
+        }
+
+        // SIWE verification is REQUIRED for finalization (critical operation)
+        if (siwe) {
+          const siweResult = await verifySiweSignature(siwe, walletAddress);
+          if (!siweResult.valid) {
+            console.warn(`[ArtifactService] SIWE verification failed for finalize: ${siweResult.error}`);
+            return new Response(JSON.stringify({ error: `Authentication failed: ${siweResult.error}` }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.log(`[ArtifactService] SIWE verified for finalize: ${walletAddress}`);
         }
 
         // Get current campaign

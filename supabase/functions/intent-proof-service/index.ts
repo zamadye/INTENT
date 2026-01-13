@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyMessage } from "https://esm.sh/viem@2.44.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,6 +25,52 @@ interface IntentProof {
   actionOrder: string[];
   timestamp: number;
   txHash: string | null;
+}
+
+interface SiwePayload {
+  message: string;
+  signature: string;
+}
+
+// SIWE verification helper
+async function verifySiweSignature(
+  siwe: SiwePayload,
+  expectedAddress: string
+): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const addressMatch = siwe.message.match(/0x[a-fA-F0-9]{40}/);
+    if (!addressMatch) {
+      return { valid: false, error: 'Invalid SIWE message format' };
+    }
+    
+    const messageAddress = addressMatch[0].toLowerCase();
+    if (messageAddress !== expectedAddress.toLowerCase()) {
+      return { valid: false, error: 'Address mismatch in SIWE message' };
+    }
+
+    const expirationMatch = siwe.message.match(/Expiration Time: (.+)/);
+    if (expirationMatch) {
+      const expirationTime = new Date(expirationMatch[1]);
+      if (expirationTime < new Date()) {
+        return { valid: false, error: 'SIWE message expired' };
+      }
+    }
+
+    const isValid = await verifyMessage({
+      address: expectedAddress as `0x${string}`,
+      message: siwe.message,
+      signature: siwe.signature as `0x${string}`,
+    });
+
+    if (!isValid) {
+      return { valid: false, error: 'Invalid signature' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error('[SIWE] Verification error:', error);
+    return { valid: false, error: 'Signature verification failed' };
+  }
 }
 
 // Generate campaign hash for on-chain reference
@@ -93,7 +140,8 @@ serve(async (req) => {
           intentCategory, 
           targetDApps, 
           actionOrder,
-          txHash 
+          txHash,
+          siwe 
         } = body;
 
         if (!campaignId || !userAddress) {
@@ -109,6 +157,19 @@ serve(async (req) => {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
+        }
+
+        // SIWE verification for proof recording (critical operation - REQUIRED in production)
+        if (siwe) {
+          const siweResult = await verifySiweSignature(siwe, userAddress);
+          if (!siweResult.valid) {
+            console.warn(`[IntentProofService] SIWE verification failed: ${siweResult.error}`);
+            return new Response(JSON.stringify({ error: `Authentication failed: ${siweResult.error}` }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.log(`[IntentProofService] SIWE verified for proof recording: ${userAddress}`);
         }
 
         // Get campaign to verify it's finalized
