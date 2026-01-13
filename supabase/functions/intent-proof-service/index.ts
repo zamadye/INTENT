@@ -311,12 +311,48 @@ serve(async (req) => {
 
         const campaignId = url.searchParams.get('campaignId');
         const userAddress = url.searchParams.get('userAddress');
+        const authHeader = req.headers.get('Authorization');
 
+        // If userAddress is specified, require authentication
+        if (userAddress) {
+          if (!authHeader) {
+            return new Response(JSON.stringify({ error: 'Authentication required for user-specific queries' }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          const token = authHeader.replace('Bearer ', '');
+          const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+          if (authError || !user) {
+            return new Response(JSON.stringify({ error: 'Invalid authentication' }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          // Verify wallet ownership via profiles table
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('wallet_address')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (profileError || !profile || profile.wallet_address.toLowerCase() !== userAddress.toLowerCase()) {
+            return new Response(JSON.stringify({ error: 'Unauthorized: You can only view your own proofs' }), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        // Build query for minted proofs (these are public once minted)
         let query = supabase
           .from('nfts')
           .select(`
             *,
-            campaign:campaigns(*)
+            campaign:campaigns!inner(id, caption, image_url, caption_hash, campaign_type, image_style, status, created_at)
           `)
           .eq('status', 'minted');
 
@@ -325,7 +361,7 @@ serve(async (req) => {
         }
 
         if (userAddress) {
-          query = query.eq('wallet_address', userAddress);
+          query = query.eq('wallet_address', userAddress.toLowerCase());
         }
 
         const { data: proofs, error } = await query.order('minted_at', { ascending: false });
@@ -335,15 +371,24 @@ serve(async (req) => {
           throw error;
         }
 
-        // Transform to proof format
-        const formattedProofs = proofs.map(p => ({
+        // Transform to proof format with filtered campaign data
+        const formattedProofs = (proofs || []).map(p => ({
           proofId: p.id,
           campaignId: p.campaign_id,
           userAddress: p.wallet_address,
           campaignHash: p.metadata_hash,
-          timestamp: new Date(p.minted_at).getTime(),
+          timestamp: p.minted_at ? new Date(p.minted_at).getTime() : null,
           txHash: p.tx_hash,
-          campaign: p.campaign
+          campaign: p.campaign ? {
+            id: p.campaign.id,
+            caption: p.campaign.caption,
+            image_url: p.campaign.image_url,
+            caption_hash: p.campaign.caption_hash,
+            campaign_type: p.campaign.campaign_type,
+            image_style: p.campaign.image_style,
+            status: p.campaign.status,
+            created_at: p.campaign.created_at,
+          } : null
         }));
 
         return new Response(JSON.stringify({ proofs: formattedProofs }), {

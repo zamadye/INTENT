@@ -305,26 +305,114 @@ serve(async (req) => {
 
         const campaignId = url.searchParams.get('id');
         const walletAddress = url.searchParams.get('wallet');
+        const authHeader = req.headers.get('Authorization');
 
         if (campaignId) {
+          // Single campaign access - check auth first
+          if (authHeader) {
+            // Authenticated request - can see own campaigns of any state
+            const token = authHeader.replace('Bearer ', '');
+            const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+            
+            if (!authError && user) {
+              // Get campaign with ownership check
+              const { data: campaign, error } = await supabase
+                .from('campaigns')
+                .select('*')
+                .eq('id', campaignId)
+                .maybeSingle();
+
+              if (error) throw error;
+
+              // If user owns this campaign, return full data
+              if (campaign && campaign.user_id === user.id) {
+                return new Response(JSON.stringify({ campaign }), {
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                });
+              }
+            }
+          }
+
+          // Unauthenticated or non-owner: only allow finalized/shared campaigns
           const { data: campaign, error } = await supabase
             .from('campaigns')
             .select('*')
             .eq('id', campaignId)
+            .in('status', ['finalized', 'shared'])
             .maybeSingle();
 
           if (error) throw error;
 
-          return new Response(JSON.stringify({ campaign }), {
+          if (!campaign) {
+            return new Response(JSON.stringify({ error: 'Campaign not found or not publicly accessible' }), {
+              status: 404,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          // Return filtered public fields only (exclude sensitive data)
+          const publicCampaign = {
+            id: campaign.id,
+            caption: campaign.caption,
+            image_url: campaign.image_url,
+            caption_hash: campaign.caption_hash,
+            image_style: campaign.image_style,
+            campaign_type: campaign.campaign_type,
+            status: campaign.status,
+            created_at: campaign.created_at,
+            // Exclude: wallet_address, user_id, tones, arc_context, custom_input
+          };
+
+          return new Response(JSON.stringify({ campaign: publicCampaign }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
 
         if (walletAddress) {
+          // Bulk wallet queries REQUIRE authentication for security
+          if (!authHeader) {
+            return new Response(JSON.stringify({ error: 'Authentication required for wallet queries' }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          const token = authHeader.replace('Bearer ', '');
+          const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+          if (authError || !user) {
+            return new Response(JSON.stringify({ error: 'Invalid authentication' }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          // Verify wallet ownership via profiles table
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('wallet_address')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (profileError || !profile) {
+            return new Response(JSON.stringify({ error: 'Profile not found' }), {
+              status: 404,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          if (profile.wallet_address.toLowerCase() !== walletAddress.toLowerCase()) {
+            return new Response(JSON.stringify({ error: 'Unauthorized: You can only view your own campaigns' }), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          // User verified - return all their campaigns including drafts
           const { data: campaigns, error } = await supabase
             .from('campaigns')
             .select('*')
-            .eq('wallet_address', walletAddress)
+            .eq('wallet_address', walletAddress.toLowerCase())
             .order('created_at', { ascending: false });
 
           if (error) throw error;
