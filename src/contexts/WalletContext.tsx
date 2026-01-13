@@ -127,10 +127,10 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load SIWE session from storage on mount
+  // Load SIWE session from storage on mount (using sessionStorage for security)
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(SIWE_SESSION_KEY);
+      const stored = sessionStorage.getItem(SIWE_SESSION_KEY);
       if (stored) {
         const session = JSON.parse(stored) as SiweSession;
         // Validate session before restoring
@@ -138,13 +138,13 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           if (session.message.expirationTime && new Date(session.message.expirationTime) > new Date()) {
             setSiweSession(session);
           } else {
-            localStorage.removeItem(SIWE_SESSION_KEY);
+            sessionStorage.removeItem(SIWE_SESSION_KEY);
           }
         }
       }
     } catch (e) {
       console.error('Failed to restore SIWE session:', e);
-      localStorage.removeItem(SIWE_SESSION_KEY);
+      sessionStorage.removeItem(SIWE_SESSION_KEY);
     }
   }, [address]);
 
@@ -248,9 +248,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         formattedMessage,
       };
       
-      // Store in state and localStorage
+      // Store in state and sessionStorage (more secure than localStorage)
       setSiweSession(session);
-      localStorage.setItem(SIWE_SESSION_KEY, JSON.stringify(session));
+      sessionStorage.setItem(SIWE_SESSION_KEY, JSON.stringify(session));
       
       toast.success('Signed in successfully');
       return true;
@@ -270,7 +270,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   // Sign out (clear both SIWE and Supabase sessions)
   const signOut = useCallback(async () => {
     setSiweSession(null);
-    localStorage.removeItem(SIWE_SESSION_KEY);
+    sessionStorage.removeItem(SIWE_SESSION_KEY);
     
     // Sign out from Supabase
     await supabase.auth.signOut();
