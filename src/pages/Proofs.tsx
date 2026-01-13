@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Filter, Eye, Calendar, Fingerprint, ExternalLink, Send, Info } from 'lucide-react';
+import { Search, Eye, Calendar, Fingerprint, ExternalLink, Send, Info, Loader2, Shield } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -24,8 +25,9 @@ import {
 } from '@/components/ui/dialog';
 import { JazziconAvatar } from '@/components/JazziconAvatar';
 import { useWallet } from '@/contexts/WalletContext';
-import { useProofs, type ProofItem } from '@/hooks/useProofs';
-import { Loader2 } from 'lucide-react';
+import { useProofsDashboard, type DashboardProof } from '@/hooks/useProofsDashboard';
+import { ProofStatsCard } from '@/components/proofs/ProofStatsCard';
+import { ProofVerificationStatus } from '@/components/proofs/ProofVerificationStatus';
 
 const INTENT_CATEGORIES = {
   builder: { label: 'Builder', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
@@ -35,15 +37,18 @@ const INTENT_CATEGORIES = {
 };
 
 const Proofs: React.FC = () => {
-  const { address, isConnected } = useWallet();
-  const { proofs, loading, incrementViews } = useProofs();
+  const { address, isConnected, isAuthenticated } = useWallet();
+  const { proofs, userProofs, stats, loading } = useProofsDashboard();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
-  const [selectedProof, setSelectedProof] = useState<ProofItem | null>(null);
+  const [selectedProof, setSelectedProof] = useState<DashboardProof | null>(null);
+  const [activeTab, setActiveTab] = useState<'all' | 'mine'>('all');
+
+  const displayProofs = activeTab === 'mine' ? userProofs : proofs;
 
   const filteredProofs = useMemo(() => {
-    let result = [...proofs];
+    let result = [...displayProofs];
 
     // Search filter
     if (searchQuery) {
@@ -52,19 +57,32 @@ const Proofs: React.FC = () => {
         (p) =>
           p.campaign?.caption?.toLowerCase().includes(query) ||
           p.wallet_address.toLowerCase().includes(query) ||
-          p.fingerprint?.toLowerCase().includes(query)
+          p.intent_fingerprint?.toLowerCase().includes(query)
       );
     }
 
     // Category filter
     if (filterCategory !== 'all') {
-      result = result.filter((p) => p.intent_category === filterCategory);
+      const categoryMap: Record<string, number> = {
+        builder: 0,
+        defi: 1,
+        social: 2,
+        infrastructure: 3,
+      };
+      result = result.filter((p) => p.intent_category === categoryMap[filterCategory]);
     }
 
     // Sort
     switch (sortBy) {
       case 'oldest':
         result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        break;
+      case 'verified':
+        result.sort((a, b) => {
+          if (a.verified_at && !b.verified_at) return -1;
+          if (!a.verified_at && b.verified_at) return 1;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
         break;
       case 'newest':
       default:
@@ -73,24 +91,42 @@ const Proofs: React.FC = () => {
     }
 
     return result;
-  }, [proofs, searchQuery, filterCategory, sortBy]);
+  }, [displayProofs, searchQuery, filterCategory, sortBy]);
 
   const truncateAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  const truncateHash = (hash: string) => `${hash.slice(0, 10)}...${hash.slice(-8)}`;
 
-  const handleViewProof = (proof: ProofItem) => {
+  const handleViewProof = (proof: DashboardProof) => {
     setSelectedProof(proof);
-    incrementViews(proof.id);
   };
 
-  const getCategoryStyle = (category: string | null) => {
-    if (!category) return 'bg-muted text-muted-foreground';
-    return INTENT_CATEGORIES[category as keyof typeof INTENT_CATEGORIES]?.color || 'bg-muted text-muted-foreground';
+  const getCategoryFromNumber = (category: number | null): string | null => {
+    if (category === null) return null;
+    const categoryMap: Record<number, string> = {
+      0: 'builder',
+      1: 'defi',
+      2: 'social',
+      3: 'infrastructure',
+    };
+    return categoryMap[category] ?? null;
   };
 
-  const getCategoryLabel = (category: string | null) => {
-    if (!category) return 'Unknown';
-    return INTENT_CATEGORIES[category as keyof typeof INTENT_CATEGORIES]?.label || category;
+  const getCategoryStyle = (category: number | null) => {
+    const catStr = getCategoryFromNumber(category);
+    if (!catStr) return 'bg-muted text-muted-foreground';
+    return INTENT_CATEGORIES[catStr as keyof typeof INTENT_CATEGORIES]?.color || 'bg-muted text-muted-foreground';
+  };
+
+  const getCategoryLabel = (category: number | null) => {
+    const catStr = getCategoryFromNumber(category);
+    if (!catStr) return 'Unknown';
+    return INTENT_CATEGORIES[catStr as keyof typeof INTENT_CATEGORIES]?.label || catStr;
+  };
+
+  const getVerificationStatus = (proof: DashboardProof) => {
+    if (proof.verified_at) return 'verified';
+    if (proof.tx_hash) return 'confirming';
+    if (proof.status === 'failed') return 'failed';
+    return 'pending';
   };
 
   return (
@@ -113,11 +149,21 @@ const Proofs: React.FC = () => {
             </p>
           </motion.div>
 
-          {/* Info Banner */}
+          {/* Stats Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
+            className="mb-6"
+          >
+            <ProofStatsCard stats={stats} isLoading={loading} />
+          </motion.div>
+
+          {/* Info Banner */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
             className="mb-6 p-4 rounded-lg bg-muted/30 border border-border/50 flex items-start gap-3"
           >
             <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
@@ -127,11 +173,27 @@ const Proofs: React.FC = () => {
             </p>
           </motion.div>
 
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'all' | 'mine')} className="mb-6">
+            <TabsList className="bg-card/50 border border-border/50">
+              <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                All Proofs
+              </TabsTrigger>
+              <TabsTrigger 
+                value="mine" 
+                disabled={!isConnected}
+                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                My Proofs {isConnected && `(${userProofs.length})`}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
           {/* Filters */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
+            transition={{ delay: 0.2 }}
             className="mb-8 space-y-4"
           >
             <div className="relative">
@@ -165,6 +227,7 @@ const Proofs: React.FC = () => {
                 <SelectContent>
                   <SelectItem value="newest">Newest First</SelectItem>
                   <SelectItem value="oldest">Oldest First</SelectItem>
+                  <SelectItem value="verified">Verified First</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -180,8 +243,12 @@ const Proofs: React.FC = () => {
               <Fingerprint className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
               <h3 className="font-display text-xl font-semibold mb-2">No Proofs Found</h3>
               <p className="text-muted-foreground">
-                {searchQuery || filterCategory !== 'all'
+                {activeTab === 'mine' && !isConnected
+                  ? 'Connect your wallet to see your proofs'
+                  : searchQuery || filterCategory !== 'all'
                   ? 'Try adjusting your search or filters'
+                  : activeTab === 'mine'
+                  ? 'You have no proofs yet. Complete a campaign to create one!'
                   : 'No completed intents have been recorded yet'}
               </p>
             </div>
@@ -236,6 +303,17 @@ const Proofs: React.FC = () => {
                       <p className="text-sm text-foreground line-clamp-2">
                         {proof.campaign?.caption || 'No caption available'}
                       </p>
+
+                      {/* Verification Status */}
+                      <div className="flex items-center gap-2">
+                        <ProofVerificationStatus
+                          proofId={proof.id}
+                          txHash={proof.tx_hash}
+                          verifiedAt={proof.verified_at}
+                          initialStatus={getVerificationStatus(proof) as 'pending' | 'confirming' | 'verified' | 'failed'}
+                          size="sm"
+                        />
+                      </div>
 
                       {/* Owner */}
                       <div className="flex items-center justify-between pt-2 border-t border-border/50">
@@ -311,12 +389,12 @@ const Proofs: React.FC = () => {
                   </div>
                 </div>
 
-                {/* dApp List */}
-                {selectedProof.dapp_list && selectedProof.dapp_list.length > 0 && (
+                {/* dApp List from campaign arc_context */}
+                {selectedProof.campaign?.arc_context && selectedProof.campaign.arc_context.length > 0 && (
                   <div>
                     <h4 className="text-sm font-medium text-muted-foreground mb-1">Target dApps</h4>
                     <div className="flex flex-wrap gap-1">
-                      {selectedProof.dapp_list.map((dapp, i) => (
+                      {selectedProof.campaign.arc_context.map((dapp, i) => (
                         <Badge key={i} variant="outline" className="text-xs">
                           {dapp}
                         </Badge>
@@ -325,24 +403,12 @@ const Proofs: React.FC = () => {
                   </div>
                 )}
 
-                {/* Action Order */}
-                {selectedProof.action_order && selectedProof.action_order.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Action Order</h4>
-                    <ol className="list-decimal list-inside text-sm space-y-1">
-                      {selectedProof.action_order.map((action, i) => (
-                        <li key={i} className="text-muted-foreground">{action}</li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-
                 {/* Fingerprint */}
-                {selectedProof.fingerprint && (
+                {selectedProof.intent_fingerprint && (
                   <div>
                     <h4 className="text-sm font-medium text-muted-foreground mb-1">Fingerprint Hash</h4>
                     <code className="text-xs font-mono bg-muted px-2 py-1 rounded block break-all">
-                      {selectedProof.fingerprint}
+                      {selectedProof.intent_fingerprint}
                     </code>
                   </div>
                 )}
