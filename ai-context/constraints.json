@@ -1,0 +1,87 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-13",
+  
+  "mandatoryMentions": ["@ArcFlowFinance"],
+  
+  "mandatoryTopics": [
+    "Arc Network",
+    "USDC gas"
+  ],
+  
+  "forbiddenClaims": [
+    "airdrop guaranteed",
+    "profit",
+    "price increase",
+    "guaranteed returns",
+    "financial advice",
+    "10x",
+    "100x",
+    "moon",
+    "lambo",
+    "rich",
+    "free money",
+    "investment advice",
+    "NFA",
+    "not financial advice",
+    "confirmed airdrop",
+    "easy money",
+    "risk free",
+    "guaranteed yield"
+  ],
+  
+  "toneLimits": {
+    "maxHype": 0.6,
+    "minHumanNoise": 0.4,
+    "description": "Content should be 60% max hype, 40% min authentic human voice"
+  },
+  
+  "captionRules": {
+    "maxLength": 280,
+    "minHashtags": 2,
+    "maxHashtags": 3,
+    "requiredHashtags": ["#ArcNetwork"],
+    "forbiddenPatterns": [
+      "\\$[0-9]+",
+      "[0-9]+x return",
+      "guaranteed.*profit",
+      "free.*airdrop"
+    ]
+  },
+  
+  "visualRules": {
+    "forbiddenElements": [
+      "text in images",
+      "logos without permission",
+      "real human faces",
+      "price charts",
+      "financial graphs with numbers"
+    ],
+    "requiredBranding": {
+      "primaryColor": "#00D9FF",
+      "secondaryColor": "#0A0E27",
+      "style": "modern fintech, professional, innovative"
+    }
+  },
+  
+  "linkInjection": {
+    "arcNetwork": "https://arc.network",
+    "arcFlowFinance": "https://arcflow.finance",
+    "testnet": "https://testnet.arcscan.app",
+    "docs": "https://docs.arc.network"
+  },
+  
+  "contentModeration": {
+    "autoReject": [
+      "explicit financial promises",
+      "competitor attacks",
+      "unverified claims",
+      "spam patterns"
+    ],
+    "requireReview": [
+      "partnership announcements",
+      "technical claims",
+      "ecosystem numbers"
+    ]
+  }
+}
