@@ -96,13 +96,21 @@ serve(async (req) => {
           });
         }
 
+        // Validate wallet address format (basic Ethereum address validation)
+        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+          return new Response(JSON.stringify({ error: 'Invalid wallet address format' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Generate intent fingerprint if intent provided
         const fingerprint = intent ? generateIntentFingerprint(intent) : null;
 
         const { data: campaign, error } = await supabase
           .from('campaigns')
           .insert({
-            wallet_address: walletAddress,
+            wallet_address: walletAddress.toLowerCase(), // Normalize to lowercase
             campaign_type: campaignType || 'general',
             arc_context: arcContext || [],
             tones: tones || [],
@@ -140,10 +148,10 @@ serve(async (req) => {
         }
 
         const body = await req.json();
-        const { campaignId, fromState, toState } = body;
+        const { campaignId, fromState, toState, walletAddress } = body;
 
-        if (!campaignId || !fromState || !toState) {
-          return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+        if (!campaignId || !fromState || !toState || !walletAddress) {
+          return new Response(JSON.stringify({ error: 'Missing required fields (campaignId, fromState, toState, walletAddress)' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -169,6 +177,15 @@ serve(async (req) => {
         if (fetchError || !currentCampaign) {
           return new Response(JSON.stringify({ error: 'Campaign not found' }), {
             status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // SECURITY: Verify ownership - only campaign owner can transition state
+        if (currentCampaign.wallet_address.toLowerCase() !== walletAddress.toLowerCase()) {
+          console.warn(`[CampaignService] Ownership check failed: ${walletAddress} != ${currentCampaign.wallet_address}`);
+          return new Response(JSON.stringify({ error: 'Unauthorized: You do not own this campaign' }), {
+            status: 403,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }

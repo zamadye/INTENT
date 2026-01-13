@@ -103,6 +103,14 @@ serve(async (req) => {
           });
         }
 
+        // Validate wallet address format
+        if (!/^0x[a-fA-F0-9]{40}$/.test(userAddress)) {
+          return new Response(JSON.stringify({ error: 'Invalid wallet address format' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Get campaign to verify it's finalized
         const { data: campaign, error: fetchError } = await supabase
           .from('campaigns')
@@ -117,12 +125,40 @@ serve(async (req) => {
           });
         }
 
+        // SECURITY: Verify user is the campaign owner
+        if (campaign.wallet_address.toLowerCase() !== userAddress.toLowerCase()) {
+          console.warn(`[IntentProofService] Ownership check failed: ${userAddress} != ${campaign.wallet_address}`);
+          return new Response(JSON.stringify({ error: 'Unauthorized: You do not own this campaign' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Campaign must be finalized or shared to record proof
         if (campaign.status !== 'finalized' && campaign.status !== 'shared') {
           return new Response(JSON.stringify({ 
             error: 'Campaign must be finalized before recording proof' 
           }), {
             status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Check for duplicate proof (one proof per user per campaign)
+        const { data: existingProof } = await supabase
+          .from('nfts')
+          .select('id')
+          .eq('campaign_id', campaignId)
+          .eq('wallet_address', userAddress.toLowerCase())
+          .eq('status', 'minted')
+          .maybeSingle();
+
+        if (existingProof) {
+          return new Response(JSON.stringify({ 
+            error: 'Proof already recorded for this campaign',
+            proofId: existingProof.id
+          }), {
+            status: 409,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }

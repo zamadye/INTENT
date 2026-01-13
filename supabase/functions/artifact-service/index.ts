@@ -105,11 +105,34 @@ serve(async (req) => {
         }
 
         const body = await req.json();
-        const { campaignId, rawCaption, targetDApps } = body;
+        const { campaignId, rawCaption, targetDApps, walletAddress } = body;
 
-        if (!campaignId || !rawCaption) {
-          return new Response(JSON.stringify({ error: 'Campaign ID and raw caption required' }), {
+        if (!campaignId || !rawCaption || !walletAddress) {
+          return new Response(JSON.stringify({ error: 'Campaign ID, raw caption, and wallet address required' }), {
             status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get campaign to verify ownership
+        const { data: existingCampaign, error: fetchError } = await supabase
+          .from('campaigns')
+          .select('*')
+          .eq('id', campaignId)
+          .single();
+
+        if (fetchError || !existingCampaign) {
+          return new Response(JSON.stringify({ error: 'Campaign not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // SECURITY: Verify ownership
+        if (existingCampaign.wallet_address.toLowerCase() !== walletAddress.toLowerCase()) {
+          console.warn(`[ArtifactService] Ownership check failed: ${walletAddress} != ${existingCampaign.wallet_address}`);
+          return new Response(JSON.stringify({ error: 'Unauthorized: You do not own this campaign' }), {
+            status: 403,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -172,10 +195,10 @@ serve(async (req) => {
         }
 
         const body = await req.json();
-        const { campaignId, imageUrl } = body;
+        const { campaignId, imageUrl, walletAddress } = body;
 
-        if (!campaignId) {
-          return new Response(JSON.stringify({ error: 'Campaign ID required' }), {
+        if (!campaignId || !walletAddress) {
+          return new Response(JSON.stringify({ error: 'Campaign ID and wallet address required' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -191,6 +214,15 @@ serve(async (req) => {
         if (fetchError || !currentCampaign) {
           return new Response(JSON.stringify({ error: 'Campaign not found' }), {
             status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // SECURITY: Verify ownership
+        if (currentCampaign.wallet_address.toLowerCase() !== walletAddress.toLowerCase()) {
+          console.warn(`[ArtifactService] Ownership check failed: ${walletAddress} != ${currentCampaign.wallet_address}`);
+          return new Response(JSON.stringify({ error: 'Unauthorized: You do not own this campaign' }), {
+            status: 403,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
