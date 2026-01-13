@@ -265,10 +265,54 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      marketplace_transactions_public: {
+        Row: {
+          buyer_masked: string | null
+          created_at: string | null
+          id: string | null
+          nft_id: string | null
+          price: number | null
+          seller_masked: string | null
+          tx_hash: string | null
+        }
+        Insert: {
+          buyer_masked?: never
+          created_at?: string | null
+          id?: string | null
+          nft_id?: string | null
+          price?: number | null
+          seller_masked?: never
+          tx_hash?: string | null
+        }
+        Update: {
+          buyer_masked?: never
+          created_at?: string | null
+          id?: string | null
+          nft_id?: string | null
+          price?: number | null
+          seller_masked?: never
+          tx_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_transactions_nft_id_fkey"
+            columns: ["nft_id"]
+            isOneToOne: false
+            referencedRelation: "nfts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      [_ in never]: never
+      validate_campaign_ownership: {
+        Args: { _campaign_id: string; _wallet_address: string }
+        Returns: boolean
+      }
+      validate_nft_ownership: {
+        Args: { _nft_id: string; _wallet_address: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
