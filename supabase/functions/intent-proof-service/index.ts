@@ -1,0 +1,381 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// Intent Categories (on-chain enum mapping)
+enum IntentCategory {
+  Builder = 0,
+  DeFi = 1,
+  Social = 2,
+  Infrastructure = 3
+}
+
+interface IntentProof {
+  campaignId: string;
+  userAddress: string;
+  campaignHash: string;
+  intentCategory: IntentCategory;
+  targetDApps: string[];
+  actionOrder: string[];
+  timestamp: number;
+  txHash: string | null;
+}
+
+// Generate campaign hash for on-chain reference
+async function generateCampaignHash(
+  campaignId: string,
+  userAddress: string,
+  captionHash: string
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(`${campaignId}|${userAddress}|${captionHash}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return '0x' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Generate intent fingerprint
+function generateIntentFingerprint(
+  category: IntentCategory,
+  targetDApps: string[],
+  actionOrder: string[]
+): string {
+  const data = JSON.stringify({
+    category,
+    dapps: [...targetDApps].sort(),
+    actions: actionOrder
+  });
+  
+  let hash = 0;
+  for (let i = 0; i < data.length; i++) {
+    const char = data.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return `0x${Math.abs(hash).toString(16).padStart(16, '0')}`;
+}
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const url = new URL(req.url);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+    const action = pathParts[pathParts.length - 1] || 'default';
+
+    console.log(`[IntentProofService] Action: ${action}, Method: ${req.method}`);
+
+    switch (action) {
+      case 'record': {
+        if (req.method !== 'POST') {
+          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const body = await req.json();
+        const { 
+          campaignId, 
+          userAddress, 
+          intentCategory, 
+          targetDApps, 
+          actionOrder,
+          txHash 
+        } = body;
+
+        if (!campaignId || !userAddress) {
+          return new Response(JSON.stringify({ error: 'Campaign ID and user address required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get campaign to verify it's finalized
+        const { data: campaign, error: fetchError } = await supabase
+          .from('campaigns')
+          .select('*')
+          .eq('id', campaignId)
+          .single();
+
+        if (fetchError || !campaign) {
+          return new Response(JSON.stringify({ error: 'Campaign not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Campaign must be finalized or shared to record proof
+        if (campaign.status !== 'finalized' && campaign.status !== 'shared') {
+          return new Response(JSON.stringify({ 
+            error: 'Campaign must be finalized before recording proof' 
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Generate campaign hash for on-chain reference
+        const campaignHash = await generateCampaignHash(
+          campaignId, 
+          userAddress, 
+          campaign.caption_hash
+        );
+
+        // Generate intent fingerprint
+        const intentFingerprint = generateIntentFingerprint(
+          intentCategory ?? IntentCategory.Social,
+          targetDApps ?? [],
+          actionOrder ?? []
+        );
+
+        const timestamp = Date.now();
+
+        // Create the proof record
+        const proof: IntentProof = {
+          campaignId,
+          userAddress,
+          campaignHash,
+          intentCategory: intentCategory ?? IntentCategory.Social,
+          targetDApps: targetDApps ?? [],
+          actionOrder: actionOrder ?? [],
+          timestamp,
+          txHash: txHash || null
+        };
+
+        // Store in NFTs table as the proof record (reusing existing structure)
+        const { data: nft, error: insertError } = await supabase
+          .from('nfts')
+          .insert({
+            campaign_id: campaignId,
+            wallet_address: userAddress,
+            metadata_hash: campaignHash,
+            status: 'minted',
+            minted_at: new Date(timestamp).toISOString(),
+            tx_hash: txHash || null
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('[IntentProofService] Record error:', insertError);
+          throw insertError;
+        }
+
+        // Update campaign to shared state
+        await supabase
+          .from('campaigns')
+          .update({ status: 'shared' })
+          .eq('id', campaignId);
+
+        console.log(`[IntentProofService] Recorded proof for campaign: ${campaignId}, hash: ${campaignHash}`);
+
+        return new Response(JSON.stringify({ 
+          success: true,
+          proof: {
+            ...proof,
+            proofId: nft.id,
+            intentFingerprint
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      case 'get': {
+        if (req.method !== 'GET') {
+          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const campaignId = url.searchParams.get('campaignId');
+        const userAddress = url.searchParams.get('userAddress');
+
+        let query = supabase
+          .from('nfts')
+          .select(`
+            *,
+            campaign:campaigns(*)
+          `)
+          .eq('status', 'minted');
+
+        if (campaignId) {
+          query = query.eq('campaign_id', campaignId);
+        }
+
+        if (userAddress) {
+          query = query.eq('wallet_address', userAddress);
+        }
+
+        const { data: proofs, error } = await query.order('minted_at', { ascending: false });
+
+        if (error) {
+          console.error('[IntentProofService] Get error:', error);
+          throw error;
+        }
+
+        // Transform to proof format
+        const formattedProofs = proofs.map(p => ({
+          proofId: p.id,
+          campaignId: p.campaign_id,
+          userAddress: p.wallet_address,
+          campaignHash: p.metadata_hash,
+          timestamp: new Date(p.minted_at).getTime(),
+          txHash: p.tx_hash,
+          campaign: p.campaign
+        }));
+
+        return new Response(JSON.stringify({ proofs: formattedProofs }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      case 'verify': {
+        if (req.method !== 'POST') {
+          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const body = await req.json();
+        const { campaignId, userAddress, providedHash } = body;
+
+        if (!campaignId || !userAddress || !providedHash) {
+          return new Response(JSON.stringify({ error: 'Campaign ID, user address, and hash required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get campaign
+        const { data: campaign, error: fetchError } = await supabase
+          .from('campaigns')
+          .select('*')
+          .eq('id', campaignId)
+          .single();
+
+        if (fetchError || !campaign) {
+          return new Response(JSON.stringify({ error: 'Campaign not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Recalculate expected hash
+        const expectedHash = await generateCampaignHash(
+          campaignId,
+          userAddress,
+          campaign.caption_hash
+        );
+
+        // Check if proof exists
+        const { data: proof, error: proofError } = await supabase
+          .from('nfts')
+          .select('*')
+          .eq('campaign_id', campaignId)
+          .eq('wallet_address', userAddress)
+          .eq('status', 'minted')
+          .maybeSingle();
+
+        const isValid = expectedHash === providedHash;
+        const proofExists = !!proof;
+
+        return new Response(JSON.stringify({ 
+          valid: isValid,
+          proofExists,
+          expectedHash,
+          providedHash,
+          campaignStatus: campaign.status,
+          proofDetails: proof ? {
+            proofId: proof.id,
+            recordedAt: proof.minted_at,
+            txHash: proof.tx_hash
+          } : null
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      case 'stats': {
+        if (req.method !== 'GET') {
+          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const userAddress = url.searchParams.get('userAddress');
+
+        // Get total proofs
+        let query = supabase
+          .from('nfts')
+          .select('*', { count: 'exact' })
+          .eq('status', 'minted');
+
+        if (userAddress) {
+          query = query.eq('wallet_address', userAddress);
+        }
+
+        const { count: totalProofs, error: countError } = await query;
+
+        if (countError) {
+          throw countError;
+        }
+
+        // Get unique users
+        const { data: uniqueUsers, error: usersError } = await supabase
+          .from('nfts')
+          .select('wallet_address')
+          .eq('status', 'minted');
+
+        if (usersError) {
+          throw usersError;
+        }
+
+        const uniqueAddresses = new Set(uniqueUsers.map(u => u.wallet_address));
+
+        return new Response(JSON.stringify({ 
+          stats: {
+            totalProofs: totalProofs || 0,
+            uniqueUsers: uniqueAddresses.size,
+            userProofs: userAddress ? totalProofs : undefined
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      default: {
+        return new Response(JSON.stringify({ 
+          error: 'Unknown action',
+          availableActions: ['record', 'get', 'verify', 'stats']
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+  } catch (error: unknown) {
+    console.error('[IntentProofService] Error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
