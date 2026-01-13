@@ -157,10 +157,20 @@ serve(async (req) => {
         // Generate intent fingerprint if intent provided
         const fingerprint = intent ? generateIntentFingerprint(intent) : null;
 
+        // Lookup user_id from profiles table by wallet_address
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('user_id')
+          .eq('wallet_address', walletAddress.toLowerCase())
+          .maybeSingle();
+
+        const userId = profile?.user_id || null;
+
         const { data: campaign, error } = await supabase
           .from('campaigns')
           .insert({
             wallet_address: walletAddress.toLowerCase(), // Normalize to lowercase
+            user_id: userId, // Link to auth.users for RLS
             campaign_type: campaignType || 'general',
             arc_context: arcContext || [],
             tones: tones || [],
