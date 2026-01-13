@@ -252,12 +252,22 @@ serve(async (req) => {
           txHash: txHash || null
         };
 
+        // Lookup user_id from profiles table by wallet_address
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('user_id')
+          .eq('wallet_address', userAddress.toLowerCase())
+          .maybeSingle();
+
+        const userId = profile?.user_id || null;
+
         // Store in NFTs table as the proof record (reusing existing structure)
         const { data: nft, error: insertError } = await supabase
           .from('nfts')
           .insert({
             campaign_id: campaignId,
             wallet_address: userAddress,
+            user_id: userId, // Link to auth.users for RLS
             metadata_hash: campaignHash,
             status: 'minted',
             minted_at: new Date(timestamp).toISOString(),

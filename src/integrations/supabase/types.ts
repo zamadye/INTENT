@@ -29,6 +29,7 @@ export type Database = {
           status: string
           tones: string[]
           updated_at: string
+          user_id: string | null
           wallet_address: string
         }
         Insert: {
@@ -45,6 +46,7 @@ export type Database = {
           status?: string
           tones?: string[]
           updated_at?: string
+          user_id?: string | null
           wallet_address: string
         }
         Update: {
@@ -61,6 +63,7 @@ export type Database = {
           status?: string
           tones?: string[]
           updated_at?: string
+          user_id?: string | null
           wallet_address?: string
         }
         Relationships: []
@@ -78,6 +81,7 @@ export type Database = {
           status: string
           token_id: string | null
           tx_hash: string | null
+          user_id: string | null
           verified_at: string | null
           wallet_address: string
         }
@@ -93,6 +97,7 @@ export type Database = {
           status?: string
           token_id?: string | null
           tx_hash?: string | null
+          user_id?: string | null
           verified_at?: string | null
           wallet_address: string
         }
@@ -108,6 +113,7 @@ export type Database = {
           status?: string
           token_id?: string | null
           tx_hash?: string | null
+          user_id?: string | null
           verified_at?: string | null
           wallet_address?: string
         }
