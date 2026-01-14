@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster as HotToaster } from "react-hot-toast";
 import { WagmiProvider } from "wagmi";
-import { config, initWeb3Modal } from "@/lib/wagmi";
+import { config } from "@/lib/wagmi";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { AccessLevelProvider } from "@/contexts/AccessLevelContext";
 import Index from "./pages/Index";
@@ -13,15 +13,9 @@ import CreateCampaign from "./pages/CreateCampaign";
 import Proofs from "./pages/Proofs";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
-import { useEffect } from "react";
-
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Initialize Web3Modal inside React lifecycle to avoid hooks error
-  useEffect(() => {
-    initWeb3Modal();
-  }, []);
 
   return (
   <WagmiProvider config={config}>

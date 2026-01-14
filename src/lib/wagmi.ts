@@ -58,17 +58,9 @@ export const config = createConfig({
   },
 });
 
-// Initialize Web3Modal - must be called inside React lifecycle
-let isWeb3ModalInitialized = false;
-
-export const initWeb3Modal = () => {
-  if (isWeb3ModalInitialized) return;
-  
-  // Only initialize if we're in a browser environment
-  if (typeof window === 'undefined') return;
-  
-  isWeb3ModalInitialized = true;
-  
+// Initialize Web3Modal synchronously (required before hooks are called)
+// This must happen at module load time to avoid race conditions with useWeb3Modal hook
+if (typeof window !== 'undefined') {
   createWeb3Modal({
     wagmiConfig: config,
     projectId,
@@ -85,7 +77,10 @@ export const initWeb3Modal = () => {
       '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // Trust Wallet
     ],
   });
-};
+}
+
+// Kept for backwards compatibility (no-op now)
+export const initWeb3Modal = () => {};
 
 declare module 'wagmi' {
   interface Register {

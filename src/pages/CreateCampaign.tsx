@@ -113,7 +113,7 @@ const CreateCampaign: React.FC = () => {
             </p>
             {accessLevel && (
               <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/30">
-                <span className="text-xs text-accent capitalize">Access: {String(accessLevel)}</span>
+                <span className="text-xs text-accent capitalize">Access: {accessLevel.tier}</span>
               </div>
             )}
           </motion.div>
