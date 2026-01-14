@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Share2, Link2, Download, X, Check, ExternalLink } from 'lucide-react';
+import { Share2, Link2, Download, Check, Lock, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,18 +17,29 @@ interface ShareModalProps {
     id: string;
     caption: string;
     imageUrl: string | null;
+    status?: string;
   };
+  proofMinted?: boolean;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
   isOpen,
   onClose,
   campaign,
+  proofMinted = false,
 }) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [imageCopied, setImageCopied] = useState(false);
 
-  const campaignLink = `${window.location.origin}/proofs/${campaign.id}`;
+  // Use share-page edge function URL for OpenGraph preview
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const sharePageUrl = `${supabaseUrl}/functions/v1/share-page?id=${campaign.id}`;
+  
+  // Direct link to proof details in the app
+  const proofDetailsUrl = `${window.location.origin}/proofs/${campaign.id}`;
+
+  // Determine if sharing is allowed (only after proof is minted)
+  const canShare = proofMinted || campaign.status === 'minted' || campaign.status === 'shared';
 
   // Download image
   const downloadImage = async () => {
@@ -43,7 +54,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       if (campaign.imageUrl.startsWith('data:')) {
         const link = document.createElement('a');
         link.href = campaign.imageUrl;
-        link.download = `intent-campaign-${campaign.id}.png`;
+        link.download = `intent-proof-${campaign.id}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -54,7 +65,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `intent-campaign-${campaign.id}.png`;
+        link.download = `intent-proof-${campaign.id}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -70,35 +81,52 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     }
   };
 
-  // Share to Twitter
+  // Share to Twitter - uses share page URL for automatic image preview
   const shareToTwitter = () => {
-    // Compose tweet text with campaign link
-    const tweetText = `${campaign.caption}\n\n🔒 Recorded as structured intent on Arc Network\n\n${campaignLink}`;
+    if (!canShare) {
+      toast.error('Mint proof first to share');
+      return;
+    }
 
-    // Open Twitter composer immediately (avoids popup blockers)
+    // Compose tweet text with share page link (for image preview)
+    const tweetText = `${campaign.caption}\n\n🔒 Recorded as structured intent on Arc Network\n\n${sharePageUrl}`;
+
+    // Open Twitter composer
     const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
     window.open(twitterUrl, '_blank', 'noopener,noreferrer,width=600,height=500');
 
-    // Kick off download + copy text (best-effort)
+    // Also download image as backup
     void (async () => {
       try {
-        await downloadImage();
-      } finally {
-        try {
-          await navigator.clipboard.writeText(tweetText);
-          toast.success('Tweet text copied. Attach the downloaded image before posting.');
-        } catch {
-          toast.success('Twitter opened! Attach the downloaded image before posting.');
+        if (campaign.imageUrl && !campaign.imageUrl.startsWith('data:')) {
+          // If it's a public URL, just notify user
+          toast.success('Tweet opened! Image will appear as preview from the link.');
+        } else {
+          // For base64, download as backup
+          await downloadImage();
+          try {
+            await navigator.clipboard.writeText(tweetText);
+            toast.success('Tweet text copied. Attach downloaded image if preview doesn\'t appear.');
+          } catch {
+            toast.success('Twitter opened! Attach the downloaded image if needed.');
+          }
         }
+      } catch (err) {
+        console.error('Share helper error:', err);
       }
     })();
   };
 
-  // Copy link to clipboard
+  // Copy share link to clipboard
   const copyLink = async () => {
+    if (!canShare) {
+      toast.error('Mint proof first to share');
+      return;
+    }
+
     try {
-      await navigator.clipboard.writeText(campaignLink);
-      toast.success('Link copied!');
+      await navigator.clipboard.writeText(sharePageUrl);
+      toast.success('Share link copied!');
     } catch (error) {
       toast.error('Failed to copy link');
     }
@@ -121,11 +149,30 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Share2 className="w-5 h-5" />
-            Share Campaign
+            Share Proof
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Gate message if not minted */}
+          {!canShare && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 rounded-lg bg-destructive/10 border border-destructive/30"
+            >
+              <div className="flex items-start gap-3">
+                <Lock className="w-5 h-5 text-destructive mt-0.5" />
+                <div>
+                  <p className="font-medium text-destructive">Proof Required</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Mint your proof first to unlock sharing. This ensures your intent is recorded on-chain before sharing.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Image Preview */}
           {campaign.imageUrl && (
             <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
@@ -149,11 +196,18 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               variant="outline" 
               className="w-full justify-start gap-3"
               onClick={shareToTwitter}
+              disabled={!canShare}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
               </svg>
               Share on X / Twitter
+              {canShare && (
+                <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
+                  <ExternalLink className="w-3 h-3" />
+                  with image preview
+                </span>
+              )}
             </Button>
 
             {/* Copy Link */}
@@ -161,15 +215,18 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               variant="outline" 
               className="w-full justify-start gap-3"
               onClick={copyLink}
+              disabled={!canShare}
             >
               <Link2 className="w-5 h-5" />
-              Copy Link
-              <span className="text-xs text-muted-foreground ml-auto">
-                Image preview via link
-              </span>
+              Copy Share Link
+              {canShare && (
+                <span className="text-xs text-muted-foreground ml-auto">
+                  OpenGraph enabled
+                </span>
+              )}
             </Button>
 
-            {/* Download */}
+            {/* Download - always available */}
             <Button 
               variant="outline" 
               className="w-full justify-start gap-3"
@@ -185,8 +242,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             </Button>
           </div>
 
-          {/* Instruction for Twitter */}
-          {imageCopied && (
+          {/* Success feedback */}
+          {imageCopied && canShare && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -195,7 +252,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               <div className="flex items-start gap-2">
                 <Check className="w-4 h-4 text-accent mt-0.5" />
                 <p className="text-sm text-accent">
-                  Image downloaded! Attach it to your tweet before posting.
+                  Ready to share! The link will show your proof image automatically on X.
                 </p>
               </div>
             </motion.div>

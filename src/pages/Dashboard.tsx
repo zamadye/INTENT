@@ -315,7 +315,9 @@ const Dashboard: React.FC = () => {
             id: shareModalCampaign.id,
             caption: shareModalCampaign.caption,
             imageUrl: shareModalCampaign.imageUrl,
+            status: shareModalCampaign.status,
           }}
+          proofMinted={shareModalCampaign.status === 'minted' || shareModalCampaign.status === 'shared'}
         />
       )}
     </div>

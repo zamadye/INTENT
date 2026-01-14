@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,11 +24,13 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
 
     const token = authHeader.replace('Bearer ', '');
     const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
@@ -44,7 +47,7 @@ serve(async (req) => {
     console.log("Authenticated user for image generation:", userId);
     // ============================================
 
-    const { caption, imageStyle, campaignType, visualPrompt } = await req.json();
+    const { caption, imageStyle, campaignType, visualPrompt, campaignId } = await req.json();
 
     // Accept either visualPrompt (from Layer 2) or caption (fallback)
     if (!visualPrompt && !caption) {
@@ -145,15 +148,64 @@ serve(async (req) => {
       );
     }
 
-    console.log("Image generated successfully (base64 data URL)");
+    console.log("Image generated successfully");
+
+    // ============================================
+    // Upload to Supabase Storage for public URL
+    // ============================================
+    let publicImageUrl = imageData; // Fallback to base64 if upload fails
+    
+    try {
+      // Create service client for storage upload
+      const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+      
+      // Extract base64 data from data URL
+      const base64Match = imageData.match(/^data:image\/(png|jpeg|webp|gif);base64,(.+)$/);
+      
+      if (base64Match) {
+        const mimeType = base64Match[1];
+        const base64Data = base64Match[2];
+        const imageBytes = base64Decode(base64Data);
+        
+        // Generate unique filename
+        const filename = `${campaignId || userId}-${Date.now()}.${mimeType === 'jpeg' ? 'jpg' : mimeType}`;
+        
+        console.log("Uploading image to storage:", filename);
+        
+        const { data: uploadData, error: uploadError } = await serviceClient.storage
+          .from('campaign-images')
+          .upload(filename, imageBytes, {
+            contentType: `image/${mimeType}`,
+            upsert: true
+          });
+        
+        if (uploadError) {
+          console.error("Storage upload error:", uploadError.message);
+          // Continue with base64 fallback
+        } else {
+          // Get public URL
+          const { data: publicUrlData } = serviceClient.storage
+            .from('campaign-images')
+            .getPublicUrl(filename);
+          
+          publicImageUrl = publicUrlData.publicUrl;
+          console.log("Image uploaded successfully:", publicImageUrl);
+        }
+      } else {
+        console.log("Image is not base64, using as-is");
+      }
+    } catch (uploadError) {
+      console.error("Image upload failed, using base64 fallback:", uploadError);
+    }
 
     return new Response(
       JSON.stringify({ 
-        imageUrl: imageData,
+        imageUrl: publicImageUrl,
         metadata: {
           style: imageStyle,
           generatedAt: new Date().toISOString(),
-          method: visualPrompt ? "3-layer-ai" : "fallback"
+          method: visualPrompt ? "3-layer-ai" : "fallback",
+          isPublicUrl: !publicImageUrl.startsWith('data:')
         }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

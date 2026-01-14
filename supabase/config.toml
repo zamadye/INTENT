@@ -55,3 +55,6 @@ verify_jwt = false
 
 [functions.intent-proof-service]
 verify_jwt = false
+
+[functions.share-page]
+verify_jwt = false
