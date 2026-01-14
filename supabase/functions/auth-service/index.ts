@@ -271,9 +271,10 @@ serve(async (req) => {
           });
         }
 
+        // Explicit field selection for profile retrieval (exclude user_id from public response)
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('*')
+          .select('id, wallet_address, username, campaigns_created, nfts_minted, created_at, updated_at')
           .eq('wallet_address', walletAddress.toLowerCase())
           .maybeSingle();
 

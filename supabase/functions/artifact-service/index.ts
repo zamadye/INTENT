@@ -174,10 +174,10 @@ serve(async (req) => {
           console.log(`[ArtifactService] SIWE verified for wallet: ${walletAddress}`);
         }
 
-        // Get campaign to verify ownership
+        // Get campaign to verify ownership (explicit field selection)
         const { data: existingCampaign, error: fetchError } = await supabase
           .from('campaigns')
-          .select('*')
+          .select('id, wallet_address, caption, caption_hash, status, image_url')
           .eq('id', campaignId)
           .single();
 
@@ -277,10 +277,10 @@ serve(async (req) => {
           console.log(`[ArtifactService] SIWE verified for finalize: ${walletAddress}`);
         }
 
-        // Get current campaign
+        // Get current campaign (explicit field selection for finalization)
         const { data: currentCampaign, error: fetchError } = await supabase
           .from('campaigns')
-          .select('*')
+          .select('id, wallet_address, caption, caption_hash, status, image_url')
           .eq('id', campaignId)
           .single();
 
@@ -367,10 +367,10 @@ serve(async (req) => {
           });
         }
 
-        // Get campaign
+        // Get campaign (explicit field selection for verification)
         const { data: campaign, error } = await supabase
           .from('campaigns')
-          .select('*')
+          .select('id, caption, image_url, status')
           .eq('id', campaignId)
           .single();
 
@@ -415,10 +415,10 @@ serve(async (req) => {
           });
         }
 
-        // Get campaign
+        // Get campaign (explicit field selection for share payload)
         const { data: campaign, error } = await supabase
           .from('campaigns')
-          .select('*')
+          .select('id, caption, image_url, caption_hash, status, created_at')
           .eq('id', campaignId)
           .single();
 

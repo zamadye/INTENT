@@ -282,10 +282,10 @@ serve(async (req) => {
           });
         }
 
-        // Get current campaign state
+        // Get current campaign state (explicit field selection for transition)
         const { data: currentCampaign, error: fetchError } = await supabase
           .from('campaigns')
-          .select('*')
+          .select('id, wallet_address, status')
           .eq('id', campaignId)
           .single();
 
@@ -357,10 +357,10 @@ serve(async (req) => {
             const { data: { user }, error: authError } = await supabase.auth.getUser(token);
             
             if (!authError && user) {
-              // Get campaign with ownership check
+              // Get campaign with ownership check (full fields for owner)
               const { data: campaign, error } = await supabase
                 .from('campaigns')
-                .select('*')
+                .select('id, user_id, wallet_address, caption, image_url, caption_hash, image_style, campaign_type, tones, arc_context, custom_input, status, image_status, image_prompt, generation_metadata, created_at, updated_at')
                 .eq('id', campaignId)
                 .maybeSingle();
 
@@ -375,10 +375,10 @@ serve(async (req) => {
             }
           }
 
-          // Unauthenticated or non-owner: only allow finalized/shared campaigns
+          // Unauthenticated or non-owner: only allow finalized/shared campaigns (public fields only)
           const { data: campaign, error } = await supabase
             .from('campaigns')
-            .select('*')
+            .select('id, caption, image_url, caption_hash, image_style, campaign_type, status, created_at')
             .eq('id', campaignId)
             .in('status', ['finalized', 'shared'])
             .maybeSingle();
@@ -392,20 +392,8 @@ serve(async (req) => {
             });
           }
 
-          // Return filtered public fields only (exclude sensitive data)
-          const publicCampaign = {
-            id: campaign.id,
-            caption: campaign.caption,
-            image_url: campaign.image_url,
-            caption_hash: campaign.caption_hash,
-            image_style: campaign.image_style,
-            campaign_type: campaign.campaign_type,
-            status: campaign.status,
-            created_at: campaign.created_at,
-            // Exclude: wallet_address, user_id, tones, arc_context, custom_input
-          };
-
-          return new Response(JSON.stringify({ campaign: publicCampaign }), {
+          // Query already uses explicit field selection - return directly (no manual filtering needed)
+          return new Response(JSON.stringify({ campaign }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -450,10 +438,10 @@ serve(async (req) => {
             });
           }
 
-          // User verified - return all their campaigns including drafts
+          // User verified - return all their campaigns including drafts (full fields for owner)
           const { data: campaigns, error } = await supabase
             .from('campaigns')
-            .select('*')
+            .select('id, user_id, wallet_address, caption, image_url, caption_hash, image_style, campaign_type, tones, arc_context, custom_input, status, image_status, image_prompt, generation_metadata, created_at, updated_at')
             .eq('wallet_address', walletAddress.toLowerCase())
             .order('created_at', { ascending: false });
 

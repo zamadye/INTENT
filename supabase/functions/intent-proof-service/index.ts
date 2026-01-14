@@ -223,10 +223,10 @@ serve(async (req) => {
           console.log(`[IntentProofService] SIWE verified for proof recording: ${userAddress}`);
         }
 
-        // Get campaign to verify it's finalized
+        // Get campaign to verify it's finalized (explicit field selection)
         const { data: campaign, error: fetchError } = await supabase
           .from('campaigns')
-          .select('*')
+          .select('id, wallet_address, caption_hash, status')
           .eq('id', campaignId)
           .single();
 
@@ -456,10 +456,10 @@ serve(async (req) => {
           });
         }
 
-        // Get campaign
+        // Get campaign (explicit field selection for verification)
         const { data: campaign, error: fetchError } = await supabase
           .from('campaigns')
-          .select('*')
+          .select('id, caption_hash, status')
           .eq('id', campaignId)
           .single();
 
@@ -477,10 +477,10 @@ serve(async (req) => {
           campaign.caption_hash
         );
 
-        // Check if proof exists
+        // Check if proof exists (explicit field selection)
         const { data: proof, error: proofError } = await supabase
           .from('nfts')
-          .select('*')
+          .select('id, minted_at, tx_hash')
           .eq('campaign_id', campaignId)
           .eq('wallet_address', userAddress)
           .eq('status', 'minted')
