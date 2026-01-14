@@ -1,5 +1,4 @@
 import React from 'react';
-import { ChevronDown } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -7,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { QUICK_START_PRESETS, QuickStartPreset } from '@/shared/constants/dapps';
+import { QUICK_START_PRESETS, QuickStartPreset } from '@/data/arcDapps';
 
 interface QuickStartSelectorProps {
   value: string;
@@ -54,7 +53,7 @@ export const QuickStartSelector: React.FC<QuickStartSelectorProps> = ({
         </SelectContent>
       </Select>
       
-      {value && (
+      {value && value !== 'custom-selection' && (
         <p className="text-xs text-muted-foreground">
           ✓ Intent category, target dApps, and suggested actions will be auto-filled
         </p>

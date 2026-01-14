@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Settings2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Settings2, Check, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { ARC_DAPPS, getDAppsByCategory } from '@/shared/constants/dapps';
+import { Badge } from '@/components/ui/badge';
+import { arcDapps, dAppsByCategory, DAppCategory, ArcDApp } from '@/data/arcDapps';
 import { cn } from '@/lib/utils';
 
 interface AdvancedOptionsProps {
@@ -17,6 +18,7 @@ interface AdvancedOptionsProps {
   onTonesChange: (tones: string[]) => void;
   customInput: string;
   onCustomInputChange: (input: string) => void;
+  isCustomMode?: boolean;
 }
 
 const toneOptions = [
@@ -27,13 +29,19 @@ const toneOptions = [
   { value: 'technical', label: 'Technical' },
 ];
 
-const dappCategories = [
-  { id: 'defi', label: 'DeFi & Lending' },
-  { id: 'yield', label: 'Yield & Assets' },
-  { id: 'bridge', label: 'Cross-Chain' },
-  { id: 'infrastructure', label: 'Infrastructure' },
-  { id: 'wallets', label: 'Wallets' },
-] as const;
+// Prioritized categories for display
+const categoryOrder: DAppCategory[] = [
+  DAppCategory.DEFI,
+  DAppCategory.YIELD,
+  DAppCategory.BRIDGE,
+  DAppCategory.PAYMENT,
+  DAppCategory.INFRASTRUCTURE,
+  DAppCategory.WALLET,
+  DAppCategory.EXCHANGE,
+  DAppCategory.LIQUIDITY,
+  DAppCategory.ECOSYSTEM,
+  DAppCategory.REGIONAL,
+];
 
 export const AdvancedOptions: React.FC<AdvancedOptionsProps> = ({
   selectedDApps,
@@ -44,8 +52,9 @@ export const AdvancedOptions: React.FC<AdvancedOptionsProps> = ({
   onTonesChange,
   customInput,
   onCustomInputChange,
+  isCustomMode = false,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(isCustomMode);
   const [newAction, setNewAction] = useState('');
 
   const toggleDApp = (dAppId: string) => {
@@ -75,6 +84,11 @@ export const AdvancedOptions: React.FC<AdvancedOptionsProps> = ({
     onActionOrderChange(actionOrder.filter((_, i) => i !== index));
   };
 
+  // Get dApp by ID
+  const getDAppInfo = (id: string): ArcDApp | undefined => {
+    return arcDapps.find(d => d.id === id);
+  };
+
   return (
     <div className="border border-border/50 rounded-xl overflow-hidden">
       <button
@@ -85,6 +99,7 @@ export const AdvancedOptions: React.FC<AdvancedOptionsProps> = ({
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Settings2 className="w-4 h-4" />
           Advanced Options
+          {isCustomMode && <Badge variant="secondary" className="text-xs">Custom Mode</Badge>}
         </div>
         {isExpanded ? (
           <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -103,25 +118,32 @@ export const AdvancedOptions: React.FC<AdvancedOptionsProps> = ({
             className="overflow-hidden"
           >
             <div className="p-4 pt-0 space-y-6 border-t border-border/30">
-              {/* Modify dApps */}
+              {/* Modify dApps - Categorized */}
               <div className="space-y-3">
-                <label className="text-sm font-medium">Modify Target dApps</label>
-                <div className="space-y-4 max-h-64 overflow-y-auto">
-                  {dappCategories.map(category => {
-                    const categoryDApps = getDAppsByCategory(category.id as any);
-                    if (categoryDApps.length === 0) return null;
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">
+                    {isCustomMode ? 'Select Target dApps' : 'Modify Target dApps'}
+                  </label>
+                  <span className="text-xs text-muted-foreground">{selectedDApps.length} selected</span>
+                </div>
+                
+                <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
+                  {categoryOrder.map(category => {
+                    const categoryDApps = dAppsByCategory[category];
+                    if (!categoryDApps || categoryDApps.length === 0) return null;
                     
                     return (
-                      <div key={category.id} className="space-y-2">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                          {category.label}
+                      <div key={category} className="space-y-2">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                          {category}
+                          <span className="text-[10px] text-muted-foreground/50">({categoryDApps.length})</span>
                         </span>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                           {categoryDApps.map(dApp => (
                             <label
                               key={dApp.id}
                               className={cn(
-                                "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-sm",
+                                "flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all text-sm",
                                 selectedDApps.includes(dApp.id)
                                   ? "bg-accent/10 border border-accent/30"
                                   : "bg-secondary/30 border border-transparent hover:bg-secondary/50"
@@ -130,8 +152,20 @@ export const AdvancedOptions: React.FC<AdvancedOptionsProps> = ({
                               <Checkbox
                                 checked={selectedDApps.includes(dApp.id)}
                                 onCheckedChange={() => toggleDApp(dApp.id)}
+                                className="mt-0.5"
                               />
-                              <span>{dApp.name}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium truncate">{dApp.name}</span>
+                                  {dApp.featured && (
+                                    <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                                  )}
+                                  {dApp.verified && (
+                                    <Check className="w-3 h-3 text-accent flex-shrink-0" />
+                                  )}
+                                </div>
+                                <span className="text-xs text-muted-foreground line-clamp-1">{dApp.type}</span>
+                              </div>
                             </label>
                           ))}
                         </div>
@@ -147,12 +181,12 @@ export const AdvancedOptions: React.FC<AdvancedOptionsProps> = ({
                 <div className="space-y-2">
                   {actionOrder.map((action, index) => (
                     <div key={index} className="flex items-center gap-2 p-2 bg-secondary/30 rounded-lg">
-                      <span className="text-xs font-mono text-muted-foreground">{index + 1}.</span>
-                      <span className="flex-1 text-sm">{action}</span>
+                      <span className="text-xs font-mono text-muted-foreground w-5">{index + 1}.</span>
+                      <span className="flex-1 text-sm truncate">{action}</span>
                       <button
                         type="button"
                         onClick={() => removeAction(index)}
-                        className="text-xs text-destructive hover:underline"
+                        className="text-xs text-destructive hover:underline flex-shrink-0"
                       >
                         Remove
                       </button>
