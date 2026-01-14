@@ -135,6 +135,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          auth_salt: string | null
           campaigns_created: number
           created_at: string
           id: string
@@ -145,6 +146,7 @@ export type Database = {
           wallet_address: string
         }
         Insert: {
+          auth_salt?: string | null
           campaigns_created?: number
           created_at?: string
           id?: string
@@ -155,6 +157,7 @@ export type Database = {
           wallet_address: string
         }
         Update: {
+          auth_salt?: string | null
           campaigns_created?: number
           created_at?: string
           id?: string
@@ -171,14 +174,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      validate_campaign_ownership: {
-        Args: { _campaign_id: string; _wallet_address: string }
-        Returns: boolean
-      }
-      validate_nft_ownership: {
-        Args: { _nft_id: string; _wallet_address: string }
-        Returns: boolean
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never

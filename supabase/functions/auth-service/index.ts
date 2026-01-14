@@ -110,17 +110,6 @@ serve(async (req) => {
 
         const walletAddress = siweResult.address!;
         const email = `${walletAddress}@wallet.local`;
-        
-        // Generate cryptographically secure password using SHA-256 hash
-        // This ensures passwords are non-predictable even if service key is partially exposed
-        const STATIC_SALT = 'arc_intent_protocol_v1_2026';
-        const encoder = new TextEncoder();
-        const keyMaterial = encoder.encode(
-          `${walletAddress}:${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}:${STATIC_SALT}:siwe_auth`
-        );
-        const hashBuffer = await crypto.subtle.digest('SHA-256', keyMaterial);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const password = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
         console.log(`[AuthService] SIWE verified for wallet: ${walletAddress}`);
 
@@ -130,12 +119,51 @@ serve(async (req) => {
           u => u.email === email || u.user_metadata?.wallet_address === walletAddress
         );
 
+        // Helper function to generate password using per-user salt
+        const generatePassword = async (userSalt: string): Promise<string> => {
+          const STATIC_SALT = 'arc_intent_protocol_v1_2026';
+          const encoder = new TextEncoder();
+          const keyMaterial = encoder.encode(
+            `${walletAddress}:${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}:${STATIC_SALT}:${userSalt}:siwe_auth`
+          );
+          const hashBuffer = await crypto.subtle.digest('SHA-256', keyMaterial);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        // Generate cryptographically random salt for new users
+        const generateRandomSalt = (): string => {
+          const saltBytes = new Uint8Array(16);
+          crypto.getRandomValues(saltBytes);
+          return Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
         let userId: string;
         let session: { access_token: string; refresh_token: string } | null = null;
 
         if (existingUser) {
-          // User exists - sign in
+          // User exists - get their auth_salt from profile and sign in
           console.log(`[AuthService] Existing user found: ${existingUser.id}`);
+          
+          // Fetch existing auth_salt from profile
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('auth_salt')
+            .eq('wallet_address', walletAddress)
+            .maybeSingle();
+          
+          // Use existing salt or generate new one if missing (migration case)
+          let userSalt = existingProfile?.auth_salt;
+          if (!userSalt) {
+            userSalt = generateRandomSalt();
+            // Store the new salt
+            await supabase
+              .from('profiles')
+              .update({ auth_salt: userSalt })
+              .eq('wallet_address', walletAddress);
+          }
+          
+          const password = await generatePassword(userSalt);
           
           const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
             email,
@@ -179,8 +207,12 @@ serve(async (req) => {
             userId = existingUser.id;
           }
         } else {
-          // New user - create account
+          // New user - create account with random salt
           console.log(`[AuthService] Creating new user for wallet: ${walletAddress}`);
+          
+          // Generate unique salt for this user
+          const userSalt = generateRandomSalt();
+          const password = await generatePassword(userSalt);
 
           const { data: signUpData, error: signUpError } = await supabase.auth.admin.createUser({
             email,
@@ -218,7 +250,7 @@ serve(async (req) => {
 
           session = signInData.session;
 
-          // Create profile for new user
+          // Create profile for new user with auth_salt
           const { error: profileError } = await supabase
             .from('profiles')
             .insert({
@@ -227,6 +259,7 @@ serve(async (req) => {
               username: null,
               campaigns_created: 0,
               nfts_minted: 0,
+              auth_salt: userSalt,
             });
 
           if (profileError) {
