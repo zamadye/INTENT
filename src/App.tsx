@@ -13,13 +13,17 @@ import CreateCampaign from "./pages/CreateCampaign";
 import Proofs from "./pages/Proofs";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
-
-// Initialize Web3Modal
-initWeb3Modal();
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  // Initialize Web3Modal inside React lifecycle to avoid hooks error
+  useEffect(() => {
+    initWeb3Modal();
+  }, []);
+
+  return (
   <WagmiProvider config={config}>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -54,6 +58,7 @@ const App = () => (
       </TooltipProvider>
     </QueryClientProvider>
   </WagmiProvider>
-);
+  );
+};
 
 export default App;

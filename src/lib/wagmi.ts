@@ -58,8 +58,17 @@ export const config = createConfig({
   },
 });
 
-// Initialize Web3Modal
+// Initialize Web3Modal - must be called inside React lifecycle
+let isWeb3ModalInitialized = false;
+
 export const initWeb3Modal = () => {
+  if (isWeb3ModalInitialized) return;
+  
+  // Only initialize if we're in a browser environment
+  if (typeof window === 'undefined') return;
+  
+  isWeb3ModalInitialized = true;
+  
   createWeb3Modal({
     wagmiConfig: config,
     projectId,
