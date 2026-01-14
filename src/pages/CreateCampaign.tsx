@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { AlertCircle, Wallet } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
-import { CampaignForm } from '@/components/campaign/CampaignForm';
+import { SimplifiedCampaignForm } from '@/components/campaign/SimplifiedCampaignForm';
 import { CampaignPreview } from '@/components/campaign/CampaignPreview';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -20,14 +20,12 @@ export interface CampaignData {
   arcContext: string[];
   customInput: string;
   imageStyle: string;
-  // New INTENT fields
   intentCategory: IntentCategory | '';
   targetDApps: string[];
   actionOrder: string[];
   timeWindow: TimeWindow;
 }
 
-// Re-export GeneratedCampaign from hook for backward compatibility
 export type { GeneratedCampaign } from '@/hooks/useCampaignGeneration';
 
 const CreateCampaign: React.FC = () => {
@@ -190,7 +188,7 @@ const CreateCampaign: React.FC = () => {
               animate={{ opacity: 1, x: 0 }}
               className="lg:col-span-3"
             >
-              <CampaignForm
+              <SimplifiedCampaignForm
                 campaignData={campaignData}
                 setCampaignData={setCampaignData}
                 onGenerate={handleGenerate}
@@ -232,7 +230,7 @@ const CreateCampaign: React.FC = () => {
               </TabsList>
               
               <TabsContent value="create">
-                <CampaignForm
+                <SimplifiedCampaignForm
                   campaignData={campaignData}
                   setCampaignData={setCampaignData}
                   onGenerate={handleGenerate}

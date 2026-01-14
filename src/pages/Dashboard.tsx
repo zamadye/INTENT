@@ -15,6 +15,7 @@ import {
   Lock,
   Unlock,
   Target,
+  Loader2,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Navbar } from '@/components/Navbar';
@@ -32,31 +33,22 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { JazziconAvatar } from '@/components/JazziconAvatar';
+import { EmptyState } from '@/components/dashboard/EmptyState';
+import { ShareModal } from '@/components/campaign/ShareModal';
 import { useWallet } from '@/contexts/WalletContext';
 import { useAccessLevel } from '@/contexts/AccessLevelContext';
+import { useDashboardData } from '@/hooks/useDashboardData';
 import toast from 'react-hot-toast';
 
 type TabType = 'campaigns' | 'activity' | 'settings';
-
-const mockCampaigns = Array.from({ length: 6 }, (_, i) => ({
-  id: `campaign-${i}`,
-  thumbnail: `https://picsum.photos/seed/camp-${i}/200/120`,
-  caption: `Campaign #${i + 1} - Building on Arc Network with USDC gas fees...`,
-  type: ['DeFi', 'Social', 'Builder'][i % 3],
-  completed: i % 2 === 0,
-  createdAt: new Date(Date.now() - i * 3600000 * 24),
-}));
-
-const mockActivity = [
-  { type: 'completed', description: 'Completed campaign "DeFi on Arc"', timestamp: new Date(Date.now() - 3600000) },
-  { type: 'created', description: 'Created campaign "USDC Gas Explained"', timestamp: new Date(Date.now() - 86400000) },
-];
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isConnected, address, truncatedAddress, balance } = useWallet();
   const { accessLevel, loading: accessLoading } = useAccessLevel();
+  const { campaigns, activities, isLoading, isEmpty, refetch } = useDashboardData();
   const [activeTab, setActiveTab] = useState<TabType>('campaigns');
+  const [shareModalCampaign, setShareModalCampaign] = useState<any>(null);
   const [preferences, setPreferences] = useState({
     defaultCampaignType: 'defi',
     emailNotifications: false,
@@ -185,52 +177,77 @@ const Dashboard: React.FC = () => {
                     </Button>
                   </div>
 
-                  <div className="glass rounded-2xl border border-border/50 overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border/30">
-                          <th className="text-left p-4 text-sm font-medium text-muted-foreground">Campaign</th>
-                          <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden md:table-cell">Category</th>
-                          <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden sm:table-cell">Status</th>
-                          <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mockCampaigns.map((campaign) => (
-                          <tr key={campaign.id} className="border-b border-border/20 hover:bg-secondary/30">
-                            <td className="p-4">
-                              <div className="flex items-center gap-3">
-                                <img src={campaign.thumbnail} alt="" className="w-16 h-10 rounded object-cover" />
-                                <span className="text-sm line-clamp-1">{campaign.caption}</span>
-                              </div>
-                            </td>
-                            <td className="p-4 hidden md:table-cell">
-                              <Badge variant="outline">{campaign.type}</Badge>
-                            </td>
-                            <td className="p-4 hidden sm:table-cell">
-                              {campaign.completed ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-usdc/20 text-usdc">
-                                  <CheckCircle className="w-3 h-3" />
-                                  Completed
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-muted text-muted-foreground">
-                                  <Clock className="w-3 h-3" />
-                                  Draft
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4">
-                              <div className="flex items-center justify-end gap-2">
-                                <Button variant="ghost" size="icon"><Eye className="w-4 h-4" /></Button>
-                                <Button variant="ghost" size="icon"><Share2 className="w-4 h-4" /></Button>
-                              </div>
-                            </td>
+                  {isLoading ? (
+                    <div className="glass rounded-2xl p-12 border border-border/50 flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    </div>
+                  ) : isEmpty ? (
+                    <EmptyState />
+                  ) : (
+                    <div className="glass rounded-2xl border border-border/50 overflow-hidden">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-border/30">
+                            <th className="text-left p-4 text-sm font-medium text-muted-foreground">Campaign</th>
+                            <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden md:table-cell">Category</th>
+                            <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden sm:table-cell">Status</th>
+                            <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {campaigns.map((campaign) => (
+                            <tr key={campaign.id} className="border-b border-border/20 hover:bg-secondary/30">
+                              <td className="p-4">
+                                <div className="flex items-center gap-3">
+                                  {campaign.thumbnail ? (
+                                    <img src={campaign.thumbnail} alt="" className="w-16 h-10 rounded object-cover bg-secondary" />
+                                  ) : (
+                                    <div className="w-16 h-10 rounded bg-secondary flex items-center justify-center text-lg">🖼️</div>
+                                  )}
+                                  <div>
+                                    <span className="text-sm line-clamp-1">{campaign.caption.substring(0, 50)}...</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {formatDistanceToNow(campaign.createdAt, { addSuffix: true })}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-4 hidden md:table-cell">
+                                <Badge variant="outline">{campaign.type}</Badge>
+                              </td>
+                              <td className="p-4 hidden sm:table-cell">
+                                {campaign.status === 'completed' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-usdc/20 text-usdc">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Completed
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-muted text-muted-foreground">
+                                    <Clock className="w-3 h-3" />
+                                    {campaign.status}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-4">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button variant="ghost" size="icon" onClick={() => navigate(`/proofs/${campaign.id}`)}>
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon"
+                                    onClick={() => setShareModalCampaign(campaign)}
+                                  >
+                                    <Share2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -238,19 +255,25 @@ const Dashboard: React.FC = () => {
                 <div className="space-y-6">
                   <h2 className="font-display text-2xl font-bold">Activity</h2>
                   <div className="glass rounded-2xl p-6 border border-border/50 space-y-6">
-                    {mockActivity.map((activity, index) => (
-                      <div key={index} className="flex gap-4">
-                        <div className="shrink-0 w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                          {getActivityIcon(activity.type)}
+                    {activities.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        No activity yet. Create your first campaign to get started.
+                      </p>
+                    ) : (
+                      activities.map((activity, index) => (
+                        <div key={index} className="flex gap-4">
+                          <div className="shrink-0 w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                            {getActivityIcon(activity.type)}
+                          </div>
+                          <div className="pt-1">
+                            <p className="text-sm">{activity.description}</p>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(activity.timestamp, { addSuffix: true })}
+                            </span>
+                          </div>
                         </div>
-                        <div className="pt-1">
-                          <p className="text-sm">{activity.description}</p>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(activity.timestamp, { addSuffix: true })}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -282,6 +305,19 @@ const Dashboard: React.FC = () => {
         </div>
       </main>
       <Footer />
+
+      {/* Share Modal */}
+      {shareModalCampaign && (
+        <ShareModal
+          isOpen={!!shareModalCampaign}
+          onClose={() => setShareModalCampaign(null)}
+          campaign={{
+            id: shareModalCampaign.id,
+            caption: shareModalCampaign.caption,
+            imageUrl: shareModalCampaign.imageUrl,
+          }}
+        />
+      )}
     </div>
   );
 };
