@@ -42,12 +42,12 @@ export const useProofs = () => {
       return;
     }
 
-    // Fetch completed campaigns for the authenticated user
+    // Fetch finalized/shared campaigns for the authenticated user
     // RLS enforces auth.uid() = user_id - only returns user's own campaigns
     const { data, error } = await supabase
       .from('campaigns')
       .select('*')
-      .eq('status', 'completed')
+      .in('status', ['finalized', 'shared'])
       .order('created_at', { ascending: false });
 
     if (error) {
