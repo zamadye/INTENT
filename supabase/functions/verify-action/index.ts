@@ -8,6 +8,12 @@ const corsHeaders = {
 
 const ARC_RPC_URL = "https://rpc.testnet.arc.network";
 
+// Input validation limits
+const MAX_WALLET_ADDRESS_LENGTH = 42;
+const MAX_ACTION_VERB_LENGTH = 50;
+const MAX_DAPP_ID_LENGTH = 100;
+const MAX_PARTICIPATION_ID_LENGTH = 36; // UUID format
+
 const EVENT_SIGNATURES: Record<string, string[]> = {
   'swap': ['0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822'],
   'trade': ['0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822'],
@@ -34,6 +40,71 @@ interface VerifyRequest {
   participationId?: string;
 }
 
+// Input validation helpers
+function validateWalletAddress(addr: string): { valid: boolean; error?: string } {
+  if (!addr || typeof addr !== 'string') {
+    return { valid: false, error: 'Wallet address is required' };
+  }
+  if (addr.length > MAX_WALLET_ADDRESS_LENGTH) {
+    return { valid: false, error: 'Invalid wallet address length' };
+  }
+  if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+    return { valid: false, error: 'Invalid wallet address format' };
+  }
+  return { valid: true };
+}
+
+function validateActionVerb(verb: string): { valid: boolean; error?: string } {
+  if (!verb || typeof verb !== 'string') {
+    return { valid: false, error: 'Action verb is required' };
+  }
+  if (verb.length > MAX_ACTION_VERB_LENGTH) {
+    return { valid: false, error: 'Action verb too long' };
+  }
+  // Only allow alphanumeric and underscore
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(verb)) {
+    return { valid: false, error: 'Invalid action verb format' };
+  }
+  return { valid: true };
+}
+
+function validateOptionalDappId(dappId?: string): { valid: boolean; error?: string } {
+  if (!dappId) return { valid: true };
+  if (typeof dappId !== 'string') {
+    return { valid: false, error: 'Invalid dappId type' };
+  }
+  if (dappId.length > MAX_DAPP_ID_LENGTH) {
+    return { valid: false, error: 'DappId too long' };
+  }
+  return { valid: true };
+}
+
+function validateOptionalParticipationId(id?: string): { valid: boolean; error?: string } {
+  if (!id) return { valid: true };
+  if (typeof id !== 'string') {
+    return { valid: false, error: 'Invalid participationId type' };
+  }
+  if (id.length > MAX_PARTICIPATION_ID_LENGTH) {
+    return { valid: false, error: 'ParticipationId too long' };
+  }
+  // UUID format validation
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return { valid: false, error: 'Invalid participationId format (expected UUID)' };
+  }
+  return { valid: true };
+}
+
+function validateOptionalMinAmount(minAmount?: number): { valid: boolean; error?: string } {
+  if (minAmount === undefined || minAmount === null) return { valid: true };
+  if (typeof minAmount !== 'number' || !isFinite(minAmount)) {
+    return { valid: false, error: 'Invalid minAmount type' };
+  }
+  if (minAmount < 0 || minAmount > 1e18) {
+    return { valid: false, error: 'minAmount out of valid range' };
+  }
+  return { valid: true };
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -42,21 +113,100 @@ serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const body = await req.json() as VerifyRequest;
-    const { walletAddress, dappId, actionVerb, minAmount } = body;
-
-    if (!walletAddress || !actionVerb) {
+    // SECURITY: Require JWT authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing walletAddress or actionVerb' }),
+        JSON.stringify({ success: false, error: 'Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.warn('[verify-action] Invalid JWT:', authError?.message);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid authentication' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[verify-action] Authenticated user: ${user.id}`);
+
+    const body = await req.json() as VerifyRequest;
+    const { walletAddress, dappId, actionVerb, minAmount, participationId } = body;
+
+    // Comprehensive input validation
+    const walletValidation = validateWalletAddress(walletAddress || '');
+    if (!walletValidation.valid) {
+      return new Response(
+        JSON.stringify({ success: false, error: walletValidation.error }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const actionValidation = validateActionVerb(actionVerb || '');
+    if (!actionValidation.valid) {
+      return new Response(
+        JSON.stringify({ success: false, error: actionValidation.error }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const dappIdValidation = validateOptionalDappId(dappId);
+    if (!dappIdValidation.valid) {
+      return new Response(
+        JSON.stringify({ success: false, error: dappIdValidation.error }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const participationIdValidation = validateOptionalParticipationId(participationId);
+    if (!participationIdValidation.valid) {
+      return new Response(
+        JSON.stringify({ success: false, error: participationIdValidation.error }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const minAmountValidation = validateOptionalMinAmount(minAmount);
+    if (!minAmountValidation.valid) {
+      return new Response(
+        JSON.stringify({ success: false, error: minAmountValidation.error }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // SECURITY: Verify wallet ownership - user can only verify their own wallet
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('wallet_address')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Profile not found. Please authenticate first.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (profile.wallet_address.toLowerCase() !== walletAddress!.toLowerCase()) {
+      console.warn(`[verify-action] Wallet mismatch: ${walletAddress} != ${profile.wallet_address}`);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized: You can only verify your own wallet' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log(`[verify-action] Verifying ${actionVerb} for ${walletAddress}`);
 
-    const signatures = EVENT_SIGNATURES[actionVerb] || EVENT_SIGNATURES['transfer'];
+    const signatures = EVENT_SIGNATURES[actionVerb!] || EVENT_SIGNATURES['transfer'];
 
     // Get current block
     const blockResponse = await fetch(ARC_RPC_URL, {
@@ -79,7 +229,7 @@ serve(async (req: Request) => {
           params: [{
             fromBlock: '0x' + fromBlock.toString(16),
             toBlock: 'latest',
-            topics: [sig, '0x000000000000000000000000' + walletAddress.slice(2).toLowerCase()],
+            topics: [sig, '0x000000000000000000000000' + walletAddress!.slice(2).toLowerCase()],
           }],
           id: 2,
         }),
@@ -98,7 +248,7 @@ serve(async (req: Request) => {
 
         if (minAmount && amount && amount < minAmount) continue;
 
-        console.log(`[verify-action] Found TX: ${log.transactionHash}`);
+        console.log(`[verify-action] Found TX: ${log.transactionHash} for user: ${user.id}`);
         
         return new Response(
           JSON.stringify({ success: true, verified: true, txHash: log.transactionHash, amount }),

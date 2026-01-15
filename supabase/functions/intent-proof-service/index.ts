@@ -32,6 +32,70 @@ interface SiwePayload {
   signature: string;
 }
 
+// ==================== INPUT VALIDATION ====================
+const INPUT_LIMITS = {
+  WALLET_ADDRESS: 42,
+  CAMPAIGN_ID: 36, // UUID
+  TX_HASH: 66, // 0x + 64 hex chars
+  TARGET_DAPPS_ARRAY_SIZE: 20,
+  ACTION_ORDER_ARRAY_SIZE: 20,
+  STRING_ARRAY_ITEM: 100,
+};
+
+function validateWalletAddress(addr: string): { valid: boolean; error?: string } {
+  if (!addr || typeof addr !== 'string') return { valid: false, error: 'Wallet address is required' };
+  if (addr.length > INPUT_LIMITS.WALLET_ADDRESS) return { valid: false, error: 'Invalid wallet address length' };
+  if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) return { valid: false, error: 'Invalid wallet address format' };
+  return { valid: true };
+}
+
+function validateUUID(id: string | undefined | null, fieldName: string): { valid: boolean; error?: string } {
+  if (!id) return { valid: false, error: `${fieldName} is required` };
+  if (typeof id !== 'string') return { valid: false, error: `${fieldName} must be a string` };
+  if (id.length > INPUT_LIMITS.CAMPAIGN_ID) return { valid: false, error: `${fieldName} too long` };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return { valid: false, error: `Invalid ${fieldName} format` };
+  }
+  return { valid: true };
+}
+
+function validateOptionalTxHash(hash: string | undefined | null): { valid: boolean; error?: string } {
+  if (!hash) return { valid: true };
+  if (typeof hash !== 'string') return { valid: false, error: 'txHash must be a string' };
+  if (hash.length > INPUT_LIMITS.TX_HASH) return { valid: false, error: 'txHash too long' };
+  if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) return { valid: false, error: 'Invalid txHash format' };
+  return { valid: true };
+}
+
+function validateArraySize(arr: unknown[] | undefined | null, maxSize: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!arr) return { valid: true };
+  if (!Array.isArray(arr)) return { valid: false, error: `${fieldName} must be an array` };
+  if (arr.length > maxSize) return { valid: false, error: `${fieldName} exceeds maximum size of ${maxSize}` };
+  return { valid: true };
+}
+
+function validateStringArrayItems(arr: string[] | undefined | null, maxItemLength: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!arr) return { valid: true };
+  for (const item of arr) {
+    if (typeof item !== 'string' || item.length > maxItemLength) {
+      return { valid: false, error: `${fieldName} contains invalid item (max ${maxItemLength} chars per item)` };
+    }
+  }
+  return { valid: true };
+}
+
+function validateIntentCategory(category: number | undefined | null): { valid: boolean; error?: string } {
+  if (category === undefined || category === null) return { valid: true };
+  if (typeof category !== 'number' || !Number.isInteger(category)) {
+    return { valid: false, error: 'intentCategory must be an integer' };
+  }
+  if (category < 0 || category > 3) { // IntentCategory enum: 0-3
+    return { valid: false, error: 'intentCategory must be 0-3' };
+  }
+  return { valid: true };
+}
+// ==================== END INPUT VALIDATION ====================
+
 // SIWE verification helper
 async function verifySiweSignature(
   siwe: SiwePayload,
@@ -173,16 +237,66 @@ serve(async (req) => {
           siwe 
         } = body;
 
-        if (!campaignId || !userAddress) {
-          return new Response(JSON.stringify({ error: 'Campaign ID and user address required' }), {
+        // Comprehensive input validation
+        const campaignIdValidation = validateUUID(campaignId, 'campaignId');
+        if (!campaignIdValidation.valid) {
+          return new Response(JSON.stringify({ error: campaignIdValidation.error }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
 
-        // Validate wallet address format
-        if (!/^0x[a-fA-F0-9]{40}$/.test(userAddress)) {
-          return new Response(JSON.stringify({ error: 'Invalid wallet address format' }), {
+        const walletValidation = validateWalletAddress(userAddress);
+        if (!walletValidation.valid) {
+          return new Response(JSON.stringify({ error: walletValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const txHashValidation = validateOptionalTxHash(txHash);
+        if (!txHashValidation.valid) {
+          return new Response(JSON.stringify({ error: txHashValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const categoryValidation = validateIntentCategory(intentCategory);
+        if (!categoryValidation.valid) {
+          return new Response(JSON.stringify({ error: categoryValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const targetDAppsValidation = validateArraySize(targetDApps, INPUT_LIMITS.TARGET_DAPPS_ARRAY_SIZE, 'targetDApps');
+        if (!targetDAppsValidation.valid) {
+          return new Response(JSON.stringify({ error: targetDAppsValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const targetDAppsItemsValidation = validateStringArrayItems(targetDApps, INPUT_LIMITS.STRING_ARRAY_ITEM, 'targetDApps');
+        if (!targetDAppsItemsValidation.valid) {
+          return new Response(JSON.stringify({ error: targetDAppsItemsValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const actionOrderValidation = validateArraySize(actionOrder, INPUT_LIMITS.ACTION_ORDER_ARRAY_SIZE, 'actionOrder');
+        if (!actionOrderValidation.valid) {
+          return new Response(JSON.stringify({ error: actionOrderValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const actionOrderItemsValidation = validateStringArrayItems(actionOrder, INPUT_LIMITS.STRING_ARRAY_ITEM, 'actionOrder');
+        if (!actionOrderItemsValidation.valid) {
+          return new Response(JSON.stringify({ error: actionOrderItemsValidation.error }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });

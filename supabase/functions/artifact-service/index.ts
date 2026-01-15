@@ -33,6 +33,66 @@ interface SiwePayload {
   signature: string;
 }
 
+// ==================== INPUT VALIDATION ====================
+const INPUT_LIMITS = {
+  WALLET_ADDRESS: 42,
+  CAMPAIGN_ID: 36, // UUID
+  RAW_CAPTION: 5000,
+  TARGET_DAPPS_ARRAY_SIZE: 20,
+  STRING_ARRAY_ITEM: 100,
+  IMAGE_URL: 2000,
+  HASH: 128,
+};
+
+function validateWalletAddress(addr: string): { valid: boolean; error?: string } {
+  if (!addr || typeof addr !== 'string') return { valid: false, error: 'Wallet address is required' };
+  if (addr.length > INPUT_LIMITS.WALLET_ADDRESS) return { valid: false, error: 'Invalid wallet address length' };
+  if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) return { valid: false, error: 'Invalid wallet address format' };
+  return { valid: true };
+}
+
+function validateUUID(id: string | undefined | null, fieldName: string): { valid: boolean; error?: string } {
+  if (!id) return { valid: false, error: `${fieldName} is required` };
+  if (typeof id !== 'string') return { valid: false, error: `${fieldName} must be a string` };
+  if (id.length > INPUT_LIMITS.CAMPAIGN_ID) return { valid: false, error: `${fieldName} too long` };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return { valid: false, error: `Invalid ${fieldName} format` };
+  }
+  return { valid: true };
+}
+
+function validateStringLength(str: string | undefined | null, maxLength: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!str) return { valid: true };
+  if (typeof str !== 'string') return { valid: false, error: `${fieldName} must be a string` };
+  if (str.length > maxLength) return { valid: false, error: `${fieldName} exceeds maximum length of ${maxLength}` };
+  return { valid: true };
+}
+
+function validateRequiredString(str: string | undefined | null, maxLength: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!str) return { valid: false, error: `${fieldName} is required` };
+  if (typeof str !== 'string') return { valid: false, error: `${fieldName} must be a string` };
+  if (str.length > maxLength) return { valid: false, error: `${fieldName} exceeds maximum length of ${maxLength}` };
+  return { valid: true };
+}
+
+function validateArraySize(arr: unknown[] | undefined | null, maxSize: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!arr) return { valid: true };
+  if (!Array.isArray(arr)) return { valid: false, error: `${fieldName} must be an array` };
+  if (arr.length > maxSize) return { valid: false, error: `${fieldName} exceeds maximum size of ${maxSize}` };
+  return { valid: true };
+}
+
+function validateStringArrayItems(arr: string[] | undefined | null, maxItemLength: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!arr) return { valid: true };
+  for (const item of arr) {
+    if (typeof item !== 'string' || item.length > maxItemLength) {
+      return { valid: false, error: `${fieldName} contains invalid item (max ${maxItemLength} chars per item)` };
+    }
+  }
+  return { valid: true };
+}
+// ==================== END INPUT VALIDATION ====================
+
 // SIWE verification helper
 async function verifySiweSignature(
   siwe: SiwePayload,
@@ -154,8 +214,42 @@ serve(async (req) => {
         const body = await req.json();
         const { campaignId, rawCaption, targetDApps, walletAddress, siwe } = body;
 
-        if (!campaignId || !rawCaption || !walletAddress) {
-          return new Response(JSON.stringify({ error: 'Campaign ID, raw caption, and wallet address required' }), {
+        // Comprehensive input validation
+        const campaignIdValidation = validateUUID(campaignId, 'campaignId');
+        if (!campaignIdValidation.valid) {
+          return new Response(JSON.stringify({ error: campaignIdValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const walletValidation = validateWalletAddress(walletAddress);
+        if (!walletValidation.valid) {
+          return new Response(JSON.stringify({ error: walletValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const captionValidation = validateRequiredString(rawCaption, INPUT_LIMITS.RAW_CAPTION, 'rawCaption');
+        if (!captionValidation.valid) {
+          return new Response(JSON.stringify({ error: captionValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const targetDAppsValidation = validateArraySize(targetDApps, INPUT_LIMITS.TARGET_DAPPS_ARRAY_SIZE, 'targetDApps');
+        if (!targetDAppsValidation.valid) {
+          return new Response(JSON.stringify({ error: targetDAppsValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const targetDAppsItemsValidation = validateStringArrayItems(targetDApps, INPUT_LIMITS.STRING_ARRAY_ITEM, 'targetDApps');
+        if (!targetDAppsItemsValidation.valid) {
+          return new Response(JSON.stringify({ error: targetDAppsItemsValidation.error }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -257,8 +351,26 @@ serve(async (req) => {
         const body = await req.json();
         const { campaignId, imageUrl, walletAddress, siwe } = body;
 
-        if (!campaignId || !walletAddress) {
-          return new Response(JSON.stringify({ error: 'Campaign ID and wallet address required' }), {
+        // Input validation for finalize
+        const campaignIdValidation = validateUUID(campaignId, 'campaignId');
+        if (!campaignIdValidation.valid) {
+          return new Response(JSON.stringify({ error: campaignIdValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const walletValidation = validateWalletAddress(walletAddress);
+        if (!walletValidation.valid) {
+          return new Response(JSON.stringify({ error: walletValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const imageUrlValidation = validateStringLength(imageUrl, INPUT_LIMITS.IMAGE_URL, 'imageUrl');
+        if (!imageUrlValidation.valid) {
+          return new Response(JSON.stringify({ error: imageUrlValidation.error }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });

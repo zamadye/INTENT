@@ -36,6 +36,80 @@ interface SiwePayload {
   signature: string;
 }
 
+// ==================== INPUT VALIDATION ====================
+// Input length limits for security
+const INPUT_LIMITS = {
+  WALLET_ADDRESS: 42,
+  CUSTOM_INPUT: 5000,
+  CAPTION: 5000,
+  IMAGE_STYLE: 100,
+  CAMPAIGN_TYPE: 100,
+  CAMPAIGN_ID: 36, // UUID
+  TONES_ARRAY_SIZE: 10,
+  ARC_CONTEXT_ARRAY_SIZE: 10,
+  TARGET_DAPPS_ARRAY_SIZE: 20,
+  STRING_ARRAY_ITEM: 100,
+};
+
+function validateStringLength(str: string | undefined | null, maxLength: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!str) return { valid: true };
+  if (typeof str !== 'string') return { valid: false, error: `${fieldName} must be a string` };
+  if (str.length > maxLength) return { valid: false, error: `${fieldName} exceeds maximum length of ${maxLength}` };
+  return { valid: true };
+}
+
+function validateArraySize(arr: unknown[] | undefined | null, maxSize: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!arr) return { valid: true };
+  if (!Array.isArray(arr)) return { valid: false, error: `${fieldName} must be an array` };
+  if (arr.length > maxSize) return { valid: false, error: `${fieldName} exceeds maximum size of ${maxSize}` };
+  return { valid: true };
+}
+
+function validateStringArrayItems(arr: string[] | undefined | null, maxItemLength: number, fieldName: string): { valid: boolean; error?: string } {
+  if (!arr) return { valid: true };
+  for (const item of arr) {
+    if (typeof item !== 'string' || item.length > maxItemLength) {
+      return { valid: false, error: `${fieldName} contains invalid item (max ${maxItemLength} chars per item)` };
+    }
+  }
+  return { valid: true };
+}
+
+function validateWalletAddress(addr: string): { valid: boolean; error?: string } {
+  if (!addr || typeof addr !== 'string') return { valid: false, error: 'Wallet address is required' };
+  if (addr.length > INPUT_LIMITS.WALLET_ADDRESS) return { valid: false, error: 'Invalid wallet address length' };
+  if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) return { valid: false, error: 'Invalid wallet address format' };
+  return { valid: true };
+}
+
+function validateUUID(id: string | undefined | null, fieldName: string): { valid: boolean; error?: string } {
+  if (!id) return { valid: false, error: `${fieldName} is required` };
+  if (typeof id !== 'string') return { valid: false, error: `${fieldName} must be a string` };
+  if (id.length > INPUT_LIMITS.CAMPAIGN_ID) return { valid: false, error: `${fieldName} too long` };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return { valid: false, error: `Invalid ${fieldName} format` };
+  }
+  return { valid: true };
+}
+
+function validateCampaignInputs(body: Record<string, unknown>): { valid: boolean; error?: string } {
+  const validations = [
+    validateStringLength(body.customInput as string, INPUT_LIMITS.CUSTOM_INPUT, 'customInput'),
+    validateStringLength(body.imageStyle as string, INPUT_LIMITS.IMAGE_STYLE, 'imageStyle'),
+    validateStringLength(body.campaignType as string, INPUT_LIMITS.CAMPAIGN_TYPE, 'campaignType'),
+    validateArraySize(body.tones as unknown[], INPUT_LIMITS.TONES_ARRAY_SIZE, 'tones'),
+    validateArraySize(body.arcContext as unknown[], INPUT_LIMITS.ARC_CONTEXT_ARRAY_SIZE, 'arcContext'),
+    validateStringArrayItems(body.tones as string[], INPUT_LIMITS.STRING_ARRAY_ITEM, 'tones'),
+    validateStringArrayItems(body.arcContext as string[], INPUT_LIMITS.STRING_ARRAY_ITEM, 'arcContext'),
+  ];
+
+  for (const validation of validations) {
+    if (!validation.valid) return validation;
+  }
+  return { valid: true };
+}
+// ==================== END INPUT VALIDATION ====================
+
 // Validation helpers
 function isStateTransitionValid(from: CampaignState, to: CampaignState): boolean {
   const validTransitions: Record<CampaignState, CampaignState[]> = {
@@ -168,16 +242,18 @@ serve(async (req) => {
         const body = await req.json();
         const { walletAddress, campaignType, arcContext, tones, customInput, imageStyle, intent } = body;
 
-        if (!walletAddress) {
-          return new Response(JSON.stringify({ error: 'Wallet address required' }), {
+        // Comprehensive input validation
+        const walletValidation = validateWalletAddress(walletAddress);
+        if (!walletValidation.valid) {
+          return new Response(JSON.stringify({ error: walletValidation.error }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
 
-        // Validate wallet address format (basic Ethereum address validation)
-        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-          return new Response(JSON.stringify({ error: 'Invalid wallet address format' }), {
+        const inputValidation = validateCampaignInputs(body);
+        if (!inputValidation.valid) {
+          return new Response(JSON.stringify({ error: inputValidation.error }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -252,8 +328,25 @@ serve(async (req) => {
         const body = await req.json();
         const { campaignId, fromState, toState, walletAddress, siwe } = body;
 
-        if (!campaignId || !fromState || !toState || !walletAddress) {
-          return new Response(JSON.stringify({ error: 'Missing required fields (campaignId, fromState, toState, walletAddress)' }), {
+        // Input validation for transition
+        const campaignIdValidation = validateUUID(campaignId, 'campaignId');
+        if (!campaignIdValidation.valid) {
+          return new Response(JSON.stringify({ error: campaignIdValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const walletValidation = validateWalletAddress(walletAddress);
+        if (!walletValidation.valid) {
+          return new Response(JSON.stringify({ error: walletValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (!fromState || !toState) {
+          return new Response(JSON.stringify({ error: 'Missing required fields (fromState, toState)' }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
