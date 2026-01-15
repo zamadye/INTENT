@@ -83,31 +83,45 @@ export function DailyTasksPanel({ onAllTasksCompleted, disabled }: DailyTasksPan
     }
   }, [address, dapps, onAllTasksCompleted]);
 
-  // Join task (record timestamp and open dApp)
+  // Join task via edge function (server-side validation)
   const handleJoinTask = async (task: DailyTask) => {
     if (!address || !userId || !taskSet) return;
 
     try {
-      // Record participation with join timestamp
-      const { error } = await supabase.from('campaign_participations').insert({
-        user_id: userId,
-        wallet_address: address,
-        template_id: task.dapp.id,
-        verification_status: 'pending',
-      });
-
-      if (error && !error.message.includes('duplicate')) {
-        console.error('Failed to record participation:', error);
+      // Get session for auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Please sign in to join tasks');
+        return;
       }
 
-      setJoinedTasks(prev => new Set([...prev, task.id]));
-      
-      // Open dApp in new tab
-      if (task.dapp.website_url) {
-        window.open(task.dapp.website_url, '_blank');
+      // Call edge function for server-side validation
+      const { data, error } = await supabase.functions.invoke('campaign-service/join', {
+        body: { templateId: task.dapp.id },
+      });
+
+      if (error) {
+        // Handle rate limit
+        if (error.message?.includes('429') || error.message?.includes('limit')) {
+          toast.error('Daily participation limit reached');
+          return;
+        }
+        console.error('Failed to join task:', error);
+        toast.error('Failed to join task');
+        return;
+      }
+
+      if (data?.success) {
+        setJoinedTasks(prev => new Set([...prev, task.id]));
+        
+        // Open dApp in new tab
+        if (task.dapp.website_url) {
+          window.open(task.dapp.website_url, '_blank');
+        }
       }
     } catch (err) {
       console.error('Error joining task:', err);
+      toast.error('Failed to join task');
     }
   };
 

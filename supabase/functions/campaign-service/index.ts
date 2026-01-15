@@ -551,10 +551,151 @@ serve(async (req) => {
         });
       }
 
+      case 'join': {
+        // Join campaign participation with server-side validation
+        if (req.method !== 'POST') {
+          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // SECURITY: Require JWT authentication
+        if (!authHeader?.startsWith('Bearer ')) {
+          return new Response(JSON.stringify({ error: 'Authentication required' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Verify JWT
+        const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: authHeader } }
+        });
+
+        const token = authHeader.replace('Bearer ', '');
+        const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getUser(token);
+        
+        if (claimsError || !claimsData?.user) {
+          console.warn('[CampaignService] Invalid JWT for join:', claimsError?.message);
+          return new Response(JSON.stringify({ error: 'Invalid authentication' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const userId = claimsData.user.id;
+        console.log(`[CampaignService] Join request from user: ${userId}`);
+
+        const body = await req.json();
+        const { templateId } = body;
+
+        // Validate templateId format
+        const templateIdValidation = validateUUID(templateId, 'templateId');
+        if (!templateIdValidation.valid) {
+          return new Response(JSON.stringify({ error: templateIdValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Get user's wallet address from profile (don't trust client)
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('wallet_address')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (profileError || !profile) {
+          return new Response(JSON.stringify({ error: 'Profile not found. Please authenticate first.' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Validate template exists and is active
+        const { data: template, error: templateError } = await supabase
+          .from('campaign_templates')
+          .select('id, is_active, name')
+          .eq('id', templateId)
+          .maybeSingle();
+
+        if (templateError || !template) {
+          return new Response(JSON.stringify({ error: 'Template not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (!template.is_active) {
+          return new Response(JSON.stringify({ error: 'Template is not active' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Rate limiting: max 20 participations per day per user
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayIso = today.toISOString();
+
+        const { count: dailyCount, error: countError } = await supabase
+          .from('campaign_participations')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .gte('created_at', todayIso);
+
+        if (countError) {
+          console.error('[CampaignService] Rate limit check error:', countError);
+        } else if ((dailyCount ?? 0) >= 20) {
+          return new Response(JSON.stringify({ error: 'Daily participation limit reached (max 20 per day)' }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Insert participation with validated data
+        const { data: participation, error: insertError } = await supabase
+          .from('campaign_participations')
+          .insert({
+            user_id: userId,
+            wallet_address: profile.wallet_address.toLowerCase(),
+            template_id: templateId,
+            verification_status: 'pending',
+          })
+          .select('id, template_id, verification_status, created_at')
+          .single();
+
+        if (insertError) {
+          // Check for duplicate (unique constraint)
+          if (insertError.code === '23505' || insertError.message.includes('duplicate')) {
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: 'Already joined this campaign',
+              alreadyJoined: true 
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.error('[CampaignService] Join insert error:', insertError);
+          throw insertError;
+        }
+
+        console.log(`[CampaignService] User ${userId} joined template ${templateId}`);
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          participation,
+          templateName: template.name
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       default: {
         return new Response(JSON.stringify({ 
           error: 'Unknown action',
-          availableActions: ['create', 'transition', 'get']
+          availableActions: ['create', 'transition', 'get', 'join']
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
