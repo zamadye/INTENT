@@ -14,6 +14,117 @@ export type Database = {
   }
   public: {
     Tables: {
+      campaign_participations: {
+        Row: {
+          campaign_id: string | null
+          created_at: string
+          id: string
+          joined_at: string
+          template_id: string
+          updated_at: string
+          user_id: string
+          verification_error: string | null
+          verification_status: string
+          verified_amount: number | null
+          verified_at: string | null
+          verified_tx_hash: string | null
+          wallet_address: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string
+          id?: string
+          joined_at?: string
+          template_id: string
+          updated_at?: string
+          user_id: string
+          verification_error?: string | null
+          verification_status?: string
+          verified_amount?: number | null
+          verified_at?: string | null
+          verified_tx_hash?: string | null
+          wallet_address: string
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string
+          id?: string
+          joined_at?: string
+          template_id?: string
+          updated_at?: string
+          user_id?: string
+          verification_error?: string | null
+          verification_status?: string
+          verified_amount?: number | null
+          verified_at?: string | null
+          verified_tx_hash?: string | null
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_participations_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_participations_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_templates: {
+        Row: {
+          category: string
+          created_at: string
+          description: string
+          icon_url: string | null
+          id: string
+          is_active: boolean | null
+          min_amount_usd: number | null
+          name: string
+          redirect_url: string
+          required_event: string
+          slug: string
+          target_contract: string
+          target_dapp: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description: string
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          min_amount_usd?: number | null
+          name: string
+          redirect_url: string
+          required_event: string
+          slug: string
+          target_contract: string
+          target_dapp: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          min_amount_usd?: number | null
+          name?: string
+          redirect_url?: string
+          required_event?: string
+          slug?: string
+          target_contract?: string
+          target_dapp?: string
+        }
+        Relationships: []
+      }
       campaigns: {
         Row: {
           arc_context: string[]

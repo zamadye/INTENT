@@ -10,6 +10,7 @@ import { WalletProvider } from "@/contexts/WalletContext";
 import { AccessLevelProvider } from "@/contexts/AccessLevelContext";
 import Index from "./pages/Index";
 import CreateCampaign from "./pages/CreateCampaign";
+import Campaigns from "./pages/Campaigns";
 import Proofs from "./pages/Proofs";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
@@ -38,6 +39,7 @@ const App = () => {
             <BrowserRouter>
               <Routes>
                 <Route path="/" element={<Index />} />
+                <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/create" element={<CreateCampaign />} />
                 <Route path="/proofs" element={<Proofs />} />
                 <Route path="/dashboard" element={<Dashboard />} />

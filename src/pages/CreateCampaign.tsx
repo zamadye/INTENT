@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { AlertCircle, Wallet } from 'lucide-react';
+import { AlertCircle, Wallet, ShieldCheck } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { SimplifiedCampaignForm } from '@/components/campaign/SimplifiedCampaignForm';
@@ -13,6 +14,7 @@ import { useWallet } from '@/contexts/WalletContext';
 import { useAccessLevel } from '@/contexts/AccessLevelContext';
 import { IntentCategory } from '@/components/campaign/IntentCategorySelector';
 import { TimeWindow } from '@/components/campaign/TimeWindowSelector';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface CampaignData {
   campaignType: string;
@@ -28,7 +30,16 @@ export interface CampaignData {
 
 export type { GeneratedCampaign } from '@/hooks/useCampaignGeneration';
 
+interface LocationState {
+  participationId?: string;
+  templateId?: string;
+}
+
 const CreateCampaign: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const state = location.state as LocationState | null;
+  
   const { isConnected, address, connect, isConnecting, isCorrectNetwork, switchNetwork } = useWallet();
   const { accessLevel, refreshAccessLevel } = useAccessLevel();
   const {
@@ -56,6 +67,68 @@ const CreateCampaign: React.FC = () => {
   });
   const [activeTab, setActiveTab] = useState('create');
   const [completedCampaignId, setCompletedCampaignId] = useState<string | null>(null);
+  
+  // Verification gating
+  const [isVerified, setIsVerified] = useState(false);
+  const [participationInfo, setParticipationInfo] = useState<{
+    id: string;
+    templateName: string;
+    verifiedAt: string;
+  } | null>(null);
+  const [checkingVerification, setCheckingVerification] = useState(true);
+
+  // Check verification status on mount
+  useEffect(() => {
+    const checkVerification = async () => {
+      if (!state?.participationId) {
+        setCheckingVerification(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('campaign_participations')
+          .select(`
+            id,
+            verification_status,
+            verified_at,
+            template:campaign_templates(name, target_dapp, category)
+          `)
+          .eq('id', state.participationId)
+          .maybeSingle();
+
+        if (error || !data) {
+          console.error('Failed to fetch participation:', error);
+          setIsVerified(false);
+        } else if (data.verification_status === 'verified') {
+          setIsVerified(true);
+          const template = data.template as any;
+          setParticipationInfo({
+            id: data.id,
+            templateName: template?.name || 'Unknown',
+            verifiedAt: data.verified_at || '',
+          });
+          
+          // Pre-fill campaign data based on template
+          if (template) {
+            setCampaignData(prev => ({
+              ...prev,
+              arcContext: [template.target_dapp],
+              intentCategory: template.category === 'swap' ? 'defi' : 
+                             template.category === 'lp' ? 'defi' : 
+                             template.category === 'bridge' ? 'defi' : '',
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Error checking verification:', err);
+      } finally {
+        setCheckingVerification(false);
+      }
+    };
+
+    checkVerification();
+  }, [state?.participationId]);
 
   const handleGenerate = async () => {
     if (!isConnected) {
@@ -91,6 +164,9 @@ const CreateCampaign: React.FC = () => {
       refreshAccessLevel();
     }
   };
+
+  // Gate: require verification to generate
+  const canGenerate = isVerified || !state?.participationId === undefined;
 
   return (
     <div className="min-h-screen bg-background">

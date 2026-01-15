@@ -58,3 +58,6 @@ verify_jwt = false
 
 [functions.share-page]
 verify_jwt = false
+
+[functions.verify-action]
+verify_jwt = false

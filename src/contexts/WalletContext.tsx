@@ -33,6 +33,7 @@ interface WalletContextType {
   // Supabase Auth state
   supabaseUser: User | null;
   supabaseSession: Session | null;
+  userId: string | null; // Helper for easy access to user ID
   // Actions
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -364,6 +365,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         isSigning,
         supabaseUser,
         supabaseSession,
+        userId: supabaseUser?.id || null,
         connect,
         disconnect,
         switchNetwork: switchNetworkHandler,
