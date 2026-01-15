@@ -551,6 +551,167 @@ serve(async (req) => {
         });
       }
 
+      case 'save': {
+        // Save/complete a generated campaign with full validation
+        if (req.method !== 'POST') {
+          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // SECURITY: Require JWT authentication
+        if (!authHeader?.startsWith('Bearer ')) {
+          return new Response(JSON.stringify({ error: 'Authentication required' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Create an authenticated client to verify JWT
+        const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: authHeader } }
+        });
+
+        const token = authHeader.replace('Bearer ', '');
+        const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getUser(token);
+        
+        if (claimsError || !claimsData?.user) {
+          console.warn('[CampaignService] Invalid JWT for save:', claimsError?.message);
+          return new Response(JSON.stringify({ error: 'Invalid authentication' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const userId = claimsData.user.id;
+        console.log(`[CampaignService] Save request from user: ${userId}`);
+
+        const body = await req.json();
+        const { 
+          walletAddress, 
+          campaignType, 
+          tones, 
+          arcContext, 
+          customInput, 
+          imageStyle,
+          caption,
+          captionHash,
+          imageUrl,
+          imageStatus,
+          imagePrompt,
+          generationMetadata
+        } = body;
+
+        // Comprehensive input validation
+        const walletValidation = validateWalletAddress(walletAddress);
+        if (!walletValidation.valid) {
+          return new Response(JSON.stringify({ error: walletValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const inputValidation = validateCampaignInputs(body);
+        if (!inputValidation.valid) {
+          return new Response(JSON.stringify({ error: inputValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Validate caption
+        const captionValidation = validateStringLength(caption, INPUT_LIMITS.CAPTION, 'caption');
+        if (!captionValidation.valid) {
+          return new Response(JSON.stringify({ error: captionValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (!caption || typeof caption !== 'string' || caption.trim().length === 0) {
+          return new Response(JSON.stringify({ error: 'Caption is required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Validate captionHash (should be a hex string, max 64 chars)
+        if (!captionHash || typeof captionHash !== 'string' || captionHash.length > 128) {
+          return new Response(JSON.stringify({ error: 'Invalid captionHash' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // SECURITY: Verify wallet ownership - user's profile wallet must match request wallet
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('wallet_address')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (profileError || !profile) {
+          return new Response(JSON.stringify({ error: 'Profile not found. Please authenticate first.' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (profile.wallet_address.toLowerCase() !== walletAddress.toLowerCase()) {
+          console.warn(`[CampaignService] Wallet mismatch: ${walletAddress} != ${profile.wallet_address}`);
+          return new Response(JSON.stringify({ error: 'Unauthorized: Wallet address does not match your profile' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Insert the campaign with validated data
+        const { data: campaign, error: insertError } = await supabase
+          .from('campaigns')
+          .insert({
+            user_id: userId,
+            wallet_address: walletAddress.toLowerCase(),
+            campaign_type: campaignType || 'general',
+            tones: tones || [],
+            arc_context: arcContext || [],
+            custom_input: customInput || null,
+            image_style: imageStyle || 'default',
+            caption: caption.trim(),
+            caption_hash: captionHash,
+            image_url: imageUrl || null,
+            image_status: imageStatus || 'pending',
+            status: 'generated', // Save as generated state
+            image_prompt: imagePrompt || null,
+            generation_metadata: generationMetadata || {}
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          // Check for duplicate caption
+          if (insertError.code === '23505') {
+            return new Response(JSON.stringify({ 
+              error: 'A campaign with similar content already exists. Please regenerate with different context.' 
+            }), {
+              status: 409,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.error('[CampaignService] Save insert error:', insertError);
+          throw insertError;
+        }
+
+        console.log(`[CampaignService] Saved campaign: ${campaign.id} for user: ${userId}`);
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          campaign 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       case 'join': {
         // Join campaign participation with server-side validation
         if (req.method !== 'POST') {
@@ -569,26 +730,26 @@ serve(async (req) => {
         }
 
         // Verify JWT
-        const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+        const supabaseAuthJoin = createClient(supabaseUrl, supabaseAnonKey, {
           global: { headers: { Authorization: authHeader } }
         });
 
-        const token = authHeader.replace('Bearer ', '');
-        const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getUser(token);
+        const tokenJoin = authHeader.replace('Bearer ', '');
+        const { data: claimsDataJoin, error: claimsErrorJoin } = await supabaseAuthJoin.auth.getUser(tokenJoin);
         
-        if (claimsError || !claimsData?.user) {
-          console.warn('[CampaignService] Invalid JWT for join:', claimsError?.message);
+        if (claimsErrorJoin || !claimsDataJoin?.user) {
+          console.warn('[CampaignService] Invalid JWT for join:', claimsErrorJoin?.message);
           return new Response(JSON.stringify({ error: 'Invalid authentication' }), {
             status: 401,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
 
-        const userId = claimsData.user.id;
-        console.log(`[CampaignService] Join request from user: ${userId}`);
+        const userIdJoin = claimsDataJoin.user.id;
+        console.log(`[CampaignService] Join request from user: ${userIdJoin}`);
 
-        const body = await req.json();
-        const { templateId } = body;
+        const bodyJoin = await req.json();
+        const { templateId } = bodyJoin;
 
         // Validate templateId format
         const templateIdValidation = validateUUID(templateId, 'templateId');
@@ -600,13 +761,13 @@ serve(async (req) => {
         }
 
         // Get user's wallet address from profile (don't trust client)
-        const { data: profile, error: profileError } = await supabase
+        const { data: profileJoin, error: profileErrorJoin } = await supabase
           .from('profiles')
           .select('wallet_address')
-          .eq('user_id', userId)
+          .eq('user_id', userIdJoin)
           .maybeSingle();
 
-        if (profileError || !profile) {
+        if (profileErrorJoin || !profileJoin) {
           return new Response(JSON.stringify({ error: 'Profile not found. Please authenticate first.' }), {
             status: 403,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -642,7 +803,7 @@ serve(async (req) => {
         const { count: dailyCount, error: countError } = await supabase
           .from('campaign_participations')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId)
+          .eq('user_id', userIdJoin)
           .gte('created_at', todayIso);
 
         if (countError) {
@@ -655,20 +816,20 @@ serve(async (req) => {
         }
 
         // Insert participation with validated data
-        const { data: participation, error: insertError } = await supabase
+        const { data: participation, error: insertErrorJoin } = await supabase
           .from('campaign_participations')
           .insert({
-            user_id: userId,
-            wallet_address: profile.wallet_address.toLowerCase(),
+            user_id: userIdJoin,
+            wallet_address: profileJoin.wallet_address.toLowerCase(),
             template_id: templateId,
             verification_status: 'pending',
           })
           .select('id, template_id, verification_status, created_at')
           .single();
 
-        if (insertError) {
+        if (insertErrorJoin) {
           // Check for duplicate (unique constraint)
-          if (insertError.code === '23505' || insertError.message.includes('duplicate')) {
+          if (insertErrorJoin.code === '23505' || insertErrorJoin.message.includes('duplicate')) {
             return new Response(JSON.stringify({ 
               success: true, 
               message: 'Already joined this campaign',
@@ -677,11 +838,11 @@ serve(async (req) => {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
-          console.error('[CampaignService] Join insert error:', insertError);
-          throw insertError;
+          console.error('[CampaignService] Join insert error:', insertErrorJoin);
+          throw insertErrorJoin;
         }
 
-        console.log(`[CampaignService] User ${userId} joined template ${templateId}`);
+        console.log(`[CampaignService] User ${userIdJoin} joined template ${templateId}`);
 
         return new Response(JSON.stringify({ 
           success: true, 
@@ -695,7 +856,7 @@ serve(async (req) => {
       default: {
         return new Response(JSON.stringify({ 
           error: 'Unknown action',
-          availableActions: ['create', 'transition', 'get', 'join']
+          availableActions: ['create', 'save', 'transition', 'get', 'join']
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

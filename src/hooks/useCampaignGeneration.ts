@@ -241,42 +241,45 @@ export function useCampaignGeneration() {
     setError(null);
 
     try {
-      // SECURITY: Get authenticated user for RLS
+      // SECURITY: Get authenticated user for edge function
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) {
+      if (!session?.access_token) {
         throw new Error('Authentication required to save campaign');
       }
 
       // Generate fingerprint from intent data
       const fingerprint = await generateFingerprint(campaignData);
       
-      const { data, error: insertError } = await supabase
-        .from('campaigns')
-        .insert({
-          user_id: session.user.id,
-          wallet_address: walletAddress,
-          campaign_type: campaignData.campaignType,
+      // Use edge function instead of direct database insert for validation
+      const response = await supabase.functions.invoke('campaign-service/save', {
+        body: {
+          walletAddress,
+          campaignType: campaignData.campaignType,
           tones: campaignData.tones,
-          arc_context: campaignData.arcContext,
-          custom_input: campaignData.customInput,
-          image_style: campaignData.imageStyle,
+          arcContext: campaignData.arcContext,
+          customInput: campaignData.customInput,
+          imageStyle: campaignData.imageStyle,
           caption: generatedCampaign.caption,
-          caption_hash: generatedCampaign.captionHash || await hashCaption(generatedCampaign.caption),
-          image_url: generatedCampaign.imageUrl,
-          image_status: generatedCampaign.imageStatus,
-          status: 'generated',
-          image_prompt: generatedCampaign.imagePrompt || null,
-          generation_metadata: generatedCampaign.generationMetadata || {}
-        })
-        .select()
-        .single();
+          captionHash: generatedCampaign.captionHash || await hashCaption(generatedCampaign.caption),
+          imageUrl: generatedCampaign.imageUrl,
+          imageStatus: generatedCampaign.imageStatus,
+          imagePrompt: generatedCampaign.imagePrompt || null,
+          generationMetadata: generatedCampaign.generationMetadata || {}
+        }
+      });
 
-      if (insertError) {
+      if (response.error) {
+        const errorMessage = response.error.message || 'Failed to save campaign';
         // Check for duplicate caption
-        if (insertError.code === '23505') {
+        if (errorMessage.includes('similar content')) {
           throw new Error('A campaign with similar content already exists. Please regenerate with different context.');
         }
-        throw insertError;
+        throw new Error(errorMessage);
+      }
+
+      const data = response.data?.campaign;
+      if (!data) {
+        throw new Error('No campaign data returned from server');
       }
 
       // Quiet confirmation - no celebration

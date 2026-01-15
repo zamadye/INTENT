@@ -57,12 +57,11 @@ export function useNFTMinting() {
     });
 
     try {
-      // SECURITY: Get authenticated user for RLS
+      // SECURITY: Verify user is authenticated (edge function handles the rest)
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user?.id) {
         throw new Error('Authentication required to mint NFT');
       }
-      const userId = session.user.id;
 
       // Step 1: Generate metadata
       setMintingState(prev => ({ 
@@ -105,65 +104,30 @@ export function useNFTMinting() {
         throw new Error(mintResult.error || 'Minting failed');
       }
 
-      // Step 3: Save NFT to database
+      // Step 3: Save NFT via edge function (server-side validation)
       setMintingState(prev => ({ 
         ...prev, 
         mintStatus: 'Recording on-chain activity...', 
         mintProgress: 80 
       }));
 
-      const { data: nftData, error: dbError } = await supabase
-        .from('nfts')
-        .insert({
-          user_id: userId,
-          campaign_id: campaignId,
-          wallet_address: walletAddress.toLowerCase(),
-          token_id: mintResult.tokenId,
-          tx_hash: mintResult.txHash,
-          metadata_hash: metadataHash,
-          proof_cost: MINT_COST_USDC,
-          status: 'minted',
-          minted_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      // Use edge function instead of direct database operations
+      const response = await supabase.functions.invoke('intent-proof-service/mint', {
+        body: {
+          campaignId,
+          walletAddress: walletAddress.toLowerCase(),
+          tokenId: mintResult.tokenId,
+          txHash: mintResult.txHash,
+          metadataHash,
+          proofCost: MINT_COST_USDC,
+        }
+      });
 
-      if (dbError) {
-        console.error('Failed to save NFT to database:', dbError);
+      if (response.error) {
+        console.error('Failed to save NFT to server:', response.error);
         // Don't fail the whole process, the mint was successful
-      }
-
-      // Step 4: Update campaign status
-      await supabase
-        .from('campaigns')
-        .update({ status: 'minted' })
-        .eq('id', campaignId);
-
-      // Step 5: Update user profile stats
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('nfts_minted, campaigns_created')
-        .eq('wallet_address', walletAddress.toLowerCase())
-        .single();
-
-      if (profile) {
-        await supabase
-          .from('profiles')
-          .update({ 
-            nfts_minted: (profile.nfts_minted || 0) + 1,
-            campaigns_created: (profile.campaigns_created || 0) + 1
-          })
-          .eq('wallet_address', walletAddress.toLowerCase());
       } else {
-        // Create profile if doesn't exist - requires user_id for RLS
-        await supabase
-          .from('profiles')
-          .insert({
-            user_id: userId,
-            wallet_address: walletAddress.toLowerCase(),
-            nfts_minted: 1,
-            campaigns_created: 1
-          });
+        console.log('✅ NFT recorded via edge function:', response.data?.nft?.id);
       }
 
       setMintingState({

@@ -668,10 +668,210 @@ serve(async (req) => {
         });
       }
 
+      case 'mint': {
+        // Server-side NFT minting record with comprehensive validation
+        if (req.method !== 'POST') {
+          return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // SECURITY: Require JWT authentication
+        if (!authHeader?.startsWith('Bearer ')) {
+          return new Response(JSON.stringify({ error: 'Authentication required' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const supabaseAuthMint = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: authHeader } }
+        });
+
+        const tokenMint = authHeader.replace('Bearer ', '');
+        const { data: claimsDataMint, error: claimsErrorMint } = await supabaseAuthMint.auth.getUser(tokenMint);
+        
+        if (claimsErrorMint || !claimsDataMint?.user) {
+          console.warn('[IntentProofService] Invalid JWT for mint:', claimsErrorMint?.message);
+          return new Response(JSON.stringify({ error: 'Invalid authentication' }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const userIdMint = claimsDataMint.user.id;
+        console.log(`[IntentProofService] Mint request from user: ${userIdMint}`);
+
+        const body = await req.json();
+        const { 
+          campaignId, 
+          walletAddress, 
+          tokenId, 
+          txHash, 
+          metadataHash, 
+          proofCost 
+        } = body;
+
+        // Comprehensive input validation
+        const campaignIdValidation = validateUUID(campaignId, 'campaignId');
+        if (!campaignIdValidation.valid) {
+          return new Response(JSON.stringify({ error: campaignIdValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const walletValidation = validateWalletAddress(walletAddress);
+        if (!walletValidation.valid) {
+          return new Response(JSON.stringify({ error: walletValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Validate optional txHash
+        const txHashValidation = validateOptionalTxHash(txHash);
+        if (!txHashValidation.valid) {
+          return new Response(JSON.stringify({ error: txHashValidation.error }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Validate tokenId (string, max 100 chars)
+        if (tokenId && (typeof tokenId !== 'string' || tokenId.length > 100)) {
+          return new Response(JSON.stringify({ error: 'Invalid tokenId format' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Validate metadataHash (string, max 128 chars)
+        if (metadataHash && (typeof metadataHash !== 'string' || metadataHash.length > 128)) {
+          return new Response(JSON.stringify({ error: 'Invalid metadataHash format' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Validate proofCost (number, positive)
+        if (proofCost !== undefined && (typeof proofCost !== 'number' || proofCost < 0 || proofCost > 10000)) {
+          return new Response(JSON.stringify({ error: 'Invalid proofCost' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // SECURITY: Verify wallet ownership - user's profile wallet must match request wallet
+        const { data: profileMint, error: profileErrorMint } = await supabase
+          .from('profiles')
+          .select('wallet_address')
+          .eq('user_id', userIdMint)
+          .maybeSingle();
+
+        if (profileErrorMint || !profileMint) {
+          return new Response(JSON.stringify({ error: 'Profile not found. Please authenticate first.' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (profileMint.wallet_address.toLowerCase() !== walletAddress.toLowerCase()) {
+          console.warn(`[IntentProofService] Wallet mismatch: ${walletAddress} != ${profileMint.wallet_address}`);
+          return new Response(JSON.stringify({ error: 'Unauthorized: Wallet address does not match your profile' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Verify campaign exists and user owns it
+        const { data: campaignMint, error: campaignErrorMint } = await supabase
+          .from('campaigns')
+          .select('id, wallet_address, status')
+          .eq('id', campaignId)
+          .maybeSingle();
+
+        if (campaignErrorMint || !campaignMint) {
+          return new Response(JSON.stringify({ error: 'Campaign not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (campaignMint.wallet_address.toLowerCase() !== walletAddress.toLowerCase()) {
+          return new Response(JSON.stringify({ error: 'Unauthorized: You do not own this campaign' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Insert NFT record with validated data
+        const { data: nft, error: insertError } = await supabase
+          .from('nfts')
+          .insert({
+            user_id: userIdMint,
+            campaign_id: campaignId,
+            wallet_address: walletAddress.toLowerCase(),
+            token_id: tokenId || null,
+            tx_hash: txHash || null,
+            metadata_hash: metadataHash || null,
+            proof_cost: proofCost || null,
+            status: 'minted',
+            minted_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('[IntentProofService] Mint insert error:', insertError);
+          throw insertError;
+        }
+
+        // Update campaign status to 'minted'
+        await supabase
+          .from('campaigns')
+          .update({ status: 'shared' }) // Mark as shared (final state)
+          .eq('id', campaignId);
+
+        // Update user profile stats
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('nfts_minted, campaigns_created')
+          .eq('user_id', userIdMint)
+          .maybeSingle();
+
+        if (existingProfile) {
+          await supabase
+            .from('profiles')
+            .update({ 
+              nfts_minted: (existingProfile.nfts_minted || 0) + 1,
+              campaigns_created: (existingProfile.campaigns_created || 0) + 1
+            })
+            .eq('user_id', userIdMint);
+        }
+
+        console.log(`[IntentProofService] Minted NFT: ${nft.id} for campaign: ${campaignId}, user: ${userIdMint}`);
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          nft: {
+            id: nft.id,
+            campaignId: nft.campaign_id,
+            tokenId: nft.token_id,
+            txHash: nft.tx_hash,
+            status: nft.status,
+            mintedAt: nft.minted_at
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       default: {
         return new Response(JSON.stringify({ 
           error: 'Unknown action',
-          availableActions: ['record', 'get', 'verify', 'stats']
+          availableActions: ['record', 'mint', 'get', 'verify', 'stats']
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
