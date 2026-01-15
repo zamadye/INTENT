@@ -785,7 +785,7 @@ serve(async (req) => {
         if (dappId) {
           const { data: dapp, error: dappError } = await supabase
             .from('arc_dapps')
-            .select('id, is_active, name, slug')
+            .select('id, is_active, name, slug, category, description, website_url, target_contract')
             .eq('id', dappId)
             .maybeSingle();
 
@@ -803,21 +803,73 @@ serve(async (req) => {
             });
           }
 
+          // Daily tasks are driven by arc_dapps, but participations.template_id has a FK to campaign_templates.
+          // So we must resolve (or create) a campaign_template for this dApp.
           targetName = dapp.name;
-          
-          // Try to find matching template, or use dappId directly
-          const { data: matchingTemplate } = await supabase
+
+          // 1) Try to find an existing template mapped to this dApp
+          const { data: matchingTemplate, error: matchingTemplateError } = await supabase
             .from('campaign_templates')
             .select('id, name')
             .eq('target_dapp', dapp.slug)
             .eq('is_active', true)
             .maybeSingle();
-          
+
+          if (matchingTemplateError) {
+            console.error('[CampaignService] Template lookup error:', matchingTemplateError);
+          }
+
           if (matchingTemplate) {
             targetTemplateId = matchingTemplate.id;
             targetName = matchingTemplate.name;
+          } else {
+            // 2) Create a minimal active template for this dApp (safe defaults)
+            const autoSlug = `${dapp.slug}-auto`;
+            const fallbackTargetContract = dapp.target_contract || '0x0000000000000000000000000000000000000000';
+
+            const { data: createdTemplate, error: createTemplateError } = await supabase
+              .from('campaign_templates')
+              .insert({
+                name: `${dapp.name} (Daily Task)`,
+                slug: autoSlug,
+                category: dapp.category,
+                description: dapp.description,
+                redirect_url: dapp.website_url,
+                required_event: 'daily_task',
+                target_dapp: dapp.slug,
+                target_contract: fallbackTargetContract,
+                is_active: true,
+                min_amount_usd: null,
+                icon_url: null,
+              })
+              .select('id, name')
+              .single();
+
+            if (createTemplateError) {
+              // If slug already exists (race/duplicate), try to reuse existing template.
+              if (createTemplateError.code === '23505') {
+                const { data: existingAutoTemplate } = await supabase
+                  .from('campaign_templates')
+                  .select('id, name')
+                  .eq('slug', autoSlug)
+                  .maybeSingle();
+
+                if (!existingAutoTemplate) {
+                  console.error('[CampaignService] Failed to reuse existing auto template after duplicate slug');
+                  throw createTemplateError;
+                }
+
+                targetTemplateId = existingAutoTemplate.id;
+                targetName = existingAutoTemplate.name;
+              } else {
+                console.error('[CampaignService] Failed to create auto template:', createTemplateError);
+                throw createTemplateError;
+              }
+            } else {
+              targetTemplateId = createdTemplate.id;
+              targetName = createdTemplate.name;
+            }
           }
-          // If no matching template, we'll use dappId as template_id
         } else {
           // Original templateId flow - validate in campaign_templates
           const { data: template, error: templateError } = await supabase
@@ -840,6 +892,7 @@ serve(async (req) => {
             });
           }
 
+          targetTemplateId = template.id;
           targetName = template.name;
         }
 
