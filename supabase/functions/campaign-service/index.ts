@@ -714,6 +714,7 @@ serve(async (req) => {
 
       case 'join': {
         // Join campaign participation with server-side validation
+        // Accepts dappId from arc_dapps table (used by DailyTasksPanel)
         if (req.method !== 'POST') {
           return new Response(JSON.stringify({ error: 'Method not allowed' }), {
             status: 405,
@@ -749,12 +750,15 @@ serve(async (req) => {
         console.log(`[CampaignService] Join request from user: ${userIdJoin}`);
 
         const bodyJoin = await req.json();
-        const { templateId } = bodyJoin;
+        const { templateId, dappId } = bodyJoin;
+        
+        // Support both templateId (campaign_templates) and dappId (arc_dapps)
+        const targetId = dappId || templateId;
 
-        // Validate templateId format
-        const templateIdValidation = validateUUID(templateId, 'templateId');
-        if (!templateIdValidation.valid) {
-          return new Response(JSON.stringify({ error: templateIdValidation.error }), {
+        // Validate ID format
+        const idValidation = validateUUID(targetId, dappId ? 'dappId' : 'templateId');
+        if (!idValidation.valid) {
+          return new Response(JSON.stringify({ error: idValidation.error }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -774,25 +778,69 @@ serve(async (req) => {
           });
         }
 
-        // Validate template exists and is active
-        const { data: template, error: templateError } = await supabase
-          .from('campaign_templates')
-          .select('id, is_active, name')
-          .eq('id', templateId)
-          .maybeSingle();
+        let targetName = 'Unknown';
+        let targetTemplateId = targetId;
 
-        if (templateError || !template) {
-          return new Response(JSON.stringify({ error: 'Template not found' }), {
-            status: 404,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
+        // If dappId provided, look up in arc_dapps first
+        if (dappId) {
+          const { data: dapp, error: dappError } = await supabase
+            .from('arc_dapps')
+            .select('id, is_active, name, slug')
+            .eq('id', dappId)
+            .maybeSingle();
 
-        if (!template.is_active) {
-          return new Response(JSON.stringify({ error: 'Template is not active' }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          if (dappError || !dapp) {
+            return new Response(JSON.stringify({ error: 'dApp not found' }), {
+              status: 404,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          if (!dapp.is_active) {
+            return new Response(JSON.stringify({ error: 'dApp is not active' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          targetName = dapp.name;
+          
+          // Try to find matching template, or use dappId directly
+          const { data: matchingTemplate } = await supabase
+            .from('campaign_templates')
+            .select('id, name')
+            .eq('target_dapp', dapp.slug)
+            .eq('is_active', true)
+            .maybeSingle();
+          
+          if (matchingTemplate) {
+            targetTemplateId = matchingTemplate.id;
+            targetName = matchingTemplate.name;
+          }
+          // If no matching template, we'll use dappId as template_id
+        } else {
+          // Original templateId flow - validate in campaign_templates
+          const { data: template, error: templateError } = await supabase
+            .from('campaign_templates')
+            .select('id, is_active, name')
+            .eq('id', targetId)
+            .maybeSingle();
+
+          if (templateError || !template) {
+            return new Response(JSON.stringify({ error: 'Template not found' }), {
+              status: 404,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          if (!template.is_active) {
+            return new Response(JSON.stringify({ error: 'Template is not active' }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          targetName = template.name;
         }
 
         // Rate limiting: max 20 participations per day per user
@@ -821,7 +869,7 @@ serve(async (req) => {
           .insert({
             user_id: userIdJoin,
             wallet_address: profileJoin.wallet_address.toLowerCase(),
-            template_id: templateId,
+            template_id: targetTemplateId,
             verification_status: 'pending',
           })
           .select('id, template_id, verification_status, created_at')
@@ -829,10 +877,10 @@ serve(async (req) => {
 
         if (insertErrorJoin) {
           // Check for duplicate (unique constraint)
-          if (insertErrorJoin.code === '23505' || insertErrorJoin.message.includes('duplicate')) {
+          if (insertErrorJoin.code === '23505' || insertErrorJoin.message?.includes('duplicate')) {
             return new Response(JSON.stringify({ 
               success: true, 
-              message: 'Already joined this campaign',
+              message: 'Already joined this task',
               alreadyJoined: true 
             }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -842,12 +890,12 @@ serve(async (req) => {
           throw insertErrorJoin;
         }
 
-        console.log(`[CampaignService] User ${userIdJoin} joined template ${templateId}`);
+        console.log(`[CampaignService] User ${userIdJoin} joined ${dappId ? 'dapp' : 'template'}: ${targetTemplateId}`);
 
         return new Response(JSON.stringify({ 
           success: true, 
           participation,
-          templateName: template.name
+          targetName
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

@@ -96,8 +96,9 @@ export function DailyTasksPanel({ onAllTasksCompleted, disabled }: DailyTasksPan
       }
 
       // Call edge function for server-side validation
+      // Send dappId for arc_dapps table lookup
       const { data, error } = await supabase.functions.invoke('campaign-service/join', {
-        body: { templateId: task.dapp.id },
+        body: { dappId: task.dapp.id },
       });
 
       if (error) {
