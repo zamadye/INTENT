@@ -264,7 +264,7 @@ export function useCampaignGeneration() {
           caption_hash: generatedCampaign.captionHash || await hashCaption(generatedCampaign.caption),
           image_url: generatedCampaign.imageUrl,
           image_status: generatedCampaign.imageStatus,
-          status: 'completed',
+          status: 'generated',
           image_prompt: generatedCampaign.imagePrompt || null,
           generation_metadata: generatedCampaign.generationMetadata || {}
         })

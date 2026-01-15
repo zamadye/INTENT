@@ -98,12 +98,12 @@ export const AccessLevelProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     try {
-      // Count completed campaigns for this wallet
+      // Count finalized/shared campaigns for this wallet (fully completed campaigns)
       const { count, error } = await supabase
         .from('campaigns')
         .select('*', { count: 'exact', head: true })
         .eq('wallet_address', address.toLowerCase())
-        .eq('status', 'completed');
+        .in('status', ['finalized', 'shared']);
 
       if (error) {
         console.error('Error fetching completed campaigns:', error);
