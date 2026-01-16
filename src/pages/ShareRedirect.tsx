@@ -13,8 +13,8 @@ const ShareRedirect = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Redirect to create page immediately
-    navigate('/create', { replace: true });
+    // Redirect to home page immediately
+    navigate('/', { replace: true });
   }, [navigate]);
 
   return (
