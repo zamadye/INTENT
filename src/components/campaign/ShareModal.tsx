@@ -31,11 +31,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [imageCopied, setImageCopied] = useState(false);
 
-  // Use shortened share URL - redirects to /create page
+  // Use shortened share URL - redirects to home page
   const sharePageUrl = `${window.location.origin}/p/${campaign.id}`;
   
-  // Direct link to create page
-  const createPageUrl = `${window.location.origin}/create`;
+  // Direct link to home page
+  const homePageUrl = `${window.location.origin}/`;
 
   // Determine if sharing is allowed (only after proof is minted)
   const canShare = proofMinted || campaign.status === 'minted' || campaign.status === 'shared';
@@ -172,15 +172,24 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             </motion.div>
           )}
 
-          {/* Image Preview */}
+          {/* Image Preview - clickable to home */}
           {campaign.imageUrl && (
-            <div className="aspect-video rounded-lg overflow-hidden bg-secondary">
+            <a 
+              href={homePageUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block aspect-video rounded-lg overflow-hidden bg-secondary hover:opacity-90 transition-opacity cursor-pointer"
+            >
               <img
                 src={campaign.imageUrl}
                 alt="Campaign preview"
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  console.error('Image failed to load:', campaign.imageUrl);
+                  e.currentTarget.style.display = 'none';
+                }}
               />
-            </div>
+            </a>
           )}
 
           {/* Caption Preview */}

@@ -119,8 +119,8 @@ interface Proof {
 
 function generateShareHtml(campaign: Campaign, proof: Proof | null): string {
   const siteUrl = 'https://app-intent.lovable.app';
-  // Redirect to /create page instead of /proofs
-  const redirectUrl = `${siteUrl}/create`;
+  // Redirect to home page for clean landing experience
+  const redirectUrl = siteUrl;
   
   // Truncate caption for meta description (max 200 chars)
   const description = campaign.caption.length > 200 

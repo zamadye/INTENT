@@ -197,7 +197,7 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
             )}
           </div>
 
-          {/* Image */}
+          {/* Image - clickable to home page */}
           <div className="mb-3 rounded-xl overflow-hidden aspect-video bg-secondary/50">
             <AnimatePresence mode="wait">
               {campaign?.imageStatus === 'generating' || (isGenerating && !campaign?.imageUrl) ? (
@@ -215,14 +215,25 @@ export const CampaignPreview: React.FC<CampaignPreviewProps> = ({
                   </div>
                 </motion.div>
               ) : campaign?.imageUrl ? (
-                <motion.img
+                <motion.a
                   key="image"
+                  href="/"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  src={campaign.imageUrl}
-                  alt="Campaign preview"
-                  className="w-full h-full object-cover"
-                />
+                  className="block w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
+                >
+                  <img
+                    src={campaign.imageUrl}
+                    alt="Campaign preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      console.error('Image failed to load:', campaign.imageUrl);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </motion.a>
               ) : (
                 <motion.div
                   key="placeholder"
