@@ -31,12 +31,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [imageCopied, setImageCopied] = useState(false);
 
-  // Use share-page edge function URL for OpenGraph preview
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const sharePageUrl = `${supabaseUrl}/functions/v1/share-page?id=${campaign.id}`;
+  // Use shortened share URL - redirects to /create page
+  const sharePageUrl = `${window.location.origin}/p/${campaign.id}`;
   
-  // Direct link to proof details in the app
-  const proofDetailsUrl = `${window.location.origin}/proofs/${campaign.id}`;
+  // Direct link to create page
+  const createPageUrl = `${window.location.origin}/create`;
 
   // Determine if sharing is allowed (only after proof is minted)
   const canShare = proofMinted || campaign.status === 'minted' || campaign.status === 'shared';

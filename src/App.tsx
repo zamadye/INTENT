@@ -12,6 +12,7 @@ import Index from "./pages/Index";
 import CreateCampaign from "./pages/CreateCampaign";
 import Proofs from "./pages/Proofs";
 import Dashboard from "./pages/Dashboard";
+import ShareRedirect from "./pages/ShareRedirect";
 import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
@@ -41,7 +42,9 @@ const App = () => {
                 <Route path="/create" element={<CreateCampaign />} />
                 <Route path="/proofs" element={<Proofs />} />
                 <Route path="/dashboard" element={<Dashboard />} />
-                {/* Legacy route redirect */}
+                {/* Share link redirect - /p/:id -> /create */}
+                <Route path="/p/:id" element={<ShareRedirect />} />
+                {/* Legacy route redirects */}
                 <Route path="/marketplace" element={<Proofs />} />
                 <Route path="/gallery" element={<Proofs />} />
                 <Route path="*" element={<NotFound />} />

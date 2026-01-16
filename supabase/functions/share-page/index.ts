@@ -118,9 +118,9 @@ interface Proof {
 }
 
 function generateShareHtml(campaign: Campaign, proof: Proof | null): string {
-  const appUrl = Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '') || 'https://app-intent.lovable.app';
   const siteUrl = 'https://app-intent.lovable.app';
-  const proofUrl = `${siteUrl}/proofs/${campaign.id}`;
+  // Redirect to /create page instead of /proofs
+  const redirectUrl = `${siteUrl}/create`;
   
   // Truncate caption for meta description (max 200 chars)
   const description = campaign.caption.length > 200 
@@ -161,7 +161,7 @@ function generateShareHtml(campaign: Campaign, proof: Proof | null): string {
   
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="${proofUrl}">
+  <meta property="og:url" content="${redirectUrl}">
   <meta property="og:title" content="${title}">
   <meta property="og:description" content="${escapeHtml(description)}">
   ${imageUrl ? `<meta property="og:image" content="${imageUrl}">` : ''}
@@ -171,13 +171,13 @@ function generateShareHtml(campaign: Campaign, proof: Proof | null): string {
   
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:url" content="${proofUrl}">
+  <meta name="twitter:url" content="${redirectUrl}">
   <meta name="twitter:title" content="${title}">
   <meta name="twitter:description" content="${escapeHtml(description)}">
   ${imageUrl ? `<meta name="twitter:image" content="${imageUrl}">` : ''}
   
-  <!-- Redirect to main app -->
-  <meta http-equiv="refresh" content="0; url=${proofUrl}">
+  <!-- Redirect to create page -->
+  <meta http-equiv="refresh" content="0; url=${redirectUrl}">
   
   <style>
     body {
@@ -217,11 +217,11 @@ function generateShareHtml(campaign: Campaign, proof: Proof | null): string {
   <div class="container">
     <h1>INTENT</h1>
     ${proofBadge}
-    <p>Redirecting to proof details...</p>
-    <p class="loading">If not redirected, <a href="${proofUrl}">click here</a></p>
+    <p>Redirecting to INTENT...</p>
+    <p class="loading">If not redirected, <a href="${redirectUrl}">click here</a></p>
   </div>
   <script>
-    window.location.href = "${proofUrl}";
+    window.location.href = "${redirectUrl}";
   </script>
 </body>
 </html>`;
