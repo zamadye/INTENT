@@ -379,6 +379,27 @@ export type Database = {
         }
         Relationships: []
       }
+      siwe_nonces: {
+        Row: {
+          expires_at: string
+          nonce: string
+          used_at: string
+          wallet_address: string
+        }
+        Insert: {
+          expires_at: string
+          nonce: string
+          used_at?: string
+          wallet_address: string
+        }
+        Update: {
+          expires_at?: string
+          nonce?: string
+          used_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

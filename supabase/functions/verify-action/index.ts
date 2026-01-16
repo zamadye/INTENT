@@ -6,6 +6,48 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting configuration
+const RATE_LIMITS = {
+  'verify-action': { requests: 50, windowSeconds: 3600 }, // 50/hour (RPC calls are expensive)
+};
+
+// In-memory rate limiting for authenticated users
+const userRateLimits = new Map<string, { count: number; windowStart: number }>();
+
+function checkUserRateLimitInMemory(
+  userId: string,
+  endpoint: string,
+  limit: { requests: number; windowSeconds: number }
+): { allowed: boolean; remaining: number; resetAt: Date } {
+  const now = Date.now();
+  const windowStart = Math.floor(now / (limit.windowSeconds * 1000)) * (limit.windowSeconds * 1000);
+  const key = `${endpoint}:${userId}:${windowStart}`;
+  const resetAt = new Date(windowStart + limit.windowSeconds * 1000);
+  
+  // Clean old entries periodically
+  if (Math.random() < 0.01) {
+    const cutoff = now - limit.windowSeconds * 1000 * 2;
+    for (const [k, v] of userRateLimits.entries()) {
+      if (v.windowStart < cutoff) {
+        userRateLimits.delete(k);
+      }
+    }
+  }
+  
+  const existing = userRateLimits.get(key);
+  
+  if (existing) {
+    if (existing.count >= limit.requests) {
+      return { allowed: false, remaining: 0, resetAt };
+    }
+    existing.count++;
+    return { allowed: true, remaining: limit.requests - existing.count, resetAt };
+  } else {
+    userRateLimits.set(key, { count: 1, windowStart });
+    return { allowed: true, remaining: limit.requests - 1, resetAt };
+  }
+}
+
 // Generic error helper - logs details server-side, returns safe message to client
 function safeError(status: number, publicMsg: string, internalDetails?: unknown): Response {
   if (internalDetails) console.error('[verify-action] Internal:', internalDetails);
@@ -165,7 +207,26 @@ serve(async (req: Request) => {
       return safeError(401, 'Invalid authentication', authError);
     }
 
+    const userId = user.id;
     console.log('[verify-action] Authenticated user successfully');
+
+    // RATE LIMITING: Protect expensive blockchain RPC calls
+    const rateCheck = checkUserRateLimitInMemory(userId, 'verify-action', RATE_LIMITS['verify-action']);
+    if (!rateCheck.allowed) {
+      console.warn(`[verify-action] Rate limit exceeded for user: ${userId}`);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Rate limit exceeded. Try again later.',
+        resetAt: rateCheck.resetAt.toISOString()
+      }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'Retry-After': String(Math.ceil((rateCheck.resetAt.getTime() - Date.now()) / 1000))
+        },
+      });
+    }
 
     const body = await req.json() as VerifyRequest;
     const { walletAddress, dappId, actionVerb, templateId } = body;

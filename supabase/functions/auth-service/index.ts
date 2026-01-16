@@ -1,6 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyMessage } from "https://esm.sh/viem@2.44.1";
 
 const corsHeaders = {
@@ -34,14 +34,7 @@ interface SiwePayload {
   address: string;
 }
 
-interface RateLimitRecord {
-  id: string;
-  request_count: number;
-  window_start: string;
-}
-
-// Rate limiting helper - uses in-memory for simplicity (avoids type issues with new tables)
-// For production, consider using Redis or the rate_limits table with proper typing after regeneration
+// Rate limiting helper - uses in-memory for simplicity
 const userRateLimits = new Map<string, { count: number; windowStart: number }>();
 
 function checkUserRateLimitInMemory(
@@ -78,8 +71,7 @@ function checkUserRateLimitInMemory(
   }
 }
 
-// IP-based rate limiting for unauthenticated endpoints (like initial SIWE auth)
-// Uses in-memory tracking since we can't store without a user_id
+// IP-based rate limiting for unauthenticated endpoints
 const ipRateLimits = new Map<string, { count: number; windowStart: number }>();
 
 function checkIpRateLimitInMemory(
@@ -115,9 +107,10 @@ function checkIpRateLimitInMemory(
   }
 }
 
-// SIWE verification helper
+// SIWE verification helper with nonce tracking to prevent replay attacks
 async function verifySiweSignature(
-  siwe: SiwePayload
+  siwe: SiwePayload,
+  supabase: SupabaseClient
 ): Promise<{ valid: boolean; error?: string; address?: string }> {
   try {
     // Parse the SIWE message to extract the address
@@ -140,6 +133,44 @@ async function verifySiweSignature(
       }
     }
 
+    // Extract and validate nonce - CRITICAL for replay attack prevention
+    const nonceMatch = siwe.message.match(/Nonce: ([a-zA-Z0-9_-]+)/);
+    if (!nonceMatch) {
+      console.warn('[SIWE] Missing nonce in message');
+      return { valid: false, error: 'Missing nonce in SIWE message' };
+    }
+    const nonce = nonceMatch[1];
+    
+    // Validate nonce format (basic sanity check)
+    if (nonce.length < 8 || nonce.length > 64) {
+      return { valid: false, error: 'Invalid nonce format' };
+    }
+
+    // Check if nonce has already been used (replay attack prevention)
+    // Using explicit type casting to avoid TypeScript issues with new tables
+    const { data: usedNonce, error: nonceCheckError } = await (supabase as unknown as {
+      from: (table: string) => {
+        select: (cols: string) => {
+          eq: (col: string, val: string) => {
+            maybeSingle: () => Promise<{ data: { nonce: string } | null; error: unknown }>
+          }
+        }
+      }
+    }).from('siwe_nonces')
+      .select('nonce')
+      .eq('nonce', nonce)
+      .maybeSingle();
+    
+    if (nonceCheckError) {
+      console.error('[SIWE] Nonce check error:', nonceCheckError);
+      // Don't fail hard on db errors, but log for monitoring
+    }
+
+    if (usedNonce) {
+      console.warn('[SIWE] Replay attack prevented - nonce already used:', nonce);
+      return { valid: false, error: 'Nonce already used - replay attack prevented' };
+    }
+
     // Verify the signature using viem
     const isValid = await verifyMessage({
       address: siwe.address as `0x${string}`,
@@ -151,10 +182,62 @@ async function verifySiweSignature(
       return { valid: false, error: 'Invalid signature' };
     }
 
+    // Store the used nonce to prevent replay attacks
+    // Nonce expires after 2 hours (beyond the SIWE message expiration)
+    const { error: nonceInsertError } = await (supabase as unknown as {
+      from: (table: string) => {
+        insert: (val: Record<string, unknown>) => Promise<{ error: unknown }>
+      }
+    }).from('siwe_nonces')
+      .insert({
+        nonce,
+        wallet_address: siwe.address.toLowerCase(),
+        expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+      });
+    
+    if (nonceInsertError) {
+      console.error('[SIWE] Failed to store nonce:', nonceInsertError);
+      // If we can't store the nonce, reject to be safe (prevents replay if DB write fails)
+      return { valid: false, error: 'Failed to record authentication - please try again' };
+    }
+
+    console.log('[SIWE] Nonce validated and stored:', nonce);
     return { valid: true, address: siwe.address.toLowerCase() };
   } catch (error) {
     console.error('[SIWE] Verification error:', error);
     return { valid: false, error: 'Signature verification failed' };
+  }
+}
+
+// Cleanup expired nonces - called periodically
+async function cleanupExpiredNonces(supabase: SupabaseClient): Promise<number> {
+  try {
+    const { data, error } = await (supabase as unknown as {
+      from: (table: string) => {
+        delete: () => {
+          lt: (col: string, val: string) => {
+            select: (cols: string) => Promise<{ data: { nonce: string }[] | null; error: unknown }>
+          }
+        }
+      }
+    }).from('siwe_nonces')
+      .delete()
+      .lt('expires_at', new Date().toISOString())
+      .select('nonce');
+    
+    if (error) {
+      console.error('[SIWE] Nonce cleanup error:', error);
+      return 0;
+    }
+    
+    const deletedCount = data?.length || 0;
+    if (deletedCount > 0) {
+      console.log(`[SIWE] Cleaned up ${deletedCount} expired nonces`);
+    }
+    return deletedCount;
+  } catch (err) {
+    console.error('[SIWE] Nonce cleanup failed:', err);
+    return 0;
   }
 }
 
@@ -184,6 +267,13 @@ serve(async (req) => {
                      'unknown';
 
     console.log(`[AuthService] Action: ${action}, Method: ${req.method}`);
+
+    // Periodically clean up expired nonces (1% chance per request)
+    if (Math.random() < 0.01) {
+      cleanupExpiredNonces(supabase).catch(err => 
+        console.error('[AuthService] Background nonce cleanup failed:', err)
+      );
+    }
 
     switch (action) {
       case 'siwe-auth': {
@@ -218,8 +308,8 @@ serve(async (req) => {
           });
         }
 
-        // Verify SIWE signature
-        const siweResult = await verifySiweSignature({ message, signature, address });
+        // Verify SIWE signature with nonce tracking
+        const siweResult = await verifySiweSignature({ message, signature, address }, supabase);
         if (!siweResult.valid) {
           return safeError(401, 'Authentication failed', `SIWE verification failed: ${siweResult.error}`);
         }
@@ -262,21 +352,29 @@ serve(async (req) => {
           console.log(`[AuthService] Existing user found: ${existingUser.id}`);
           
           // Fetch existing auth_salt from the secure secrets table (service_role only)
-          // Use explicit any to bypass type system for new table
-          const { data: existingSecret } = await (supabase as unknown as { from: (table: string) => { select: (cols: string) => { eq: (col: string, val: string) => { maybeSingle: () => Promise<{ data: unknown; error: unknown }> } } } })
-            .from('profiles_auth_secrets')
+          const { data: existingSecret } = await (supabase as unknown as {
+            from: (table: string) => {
+              select: (cols: string) => {
+                eq: (col: string, val: string) => {
+                  maybeSingle: () => Promise<{ data: { auth_salt: string } | null; error: unknown }>
+                }
+              }
+            }
+          }).from('profiles_auth_secrets')
             .select('auth_salt')
             .eq('user_id', existingUser.id)
             .maybeSingle();
           
           // Use existing salt or generate new one if missing (migration case)
-          const secretData = existingSecret as { auth_salt: string } | null;
-          let userSalt = secretData?.auth_salt;
+          let userSalt = existingSecret?.auth_salt;
           if (!userSalt) {
             userSalt = generateRandomSalt();
             // Store the new salt in the secure table
-            await (supabase as unknown as { from: (table: string) => { upsert: (val: Record<string, unknown>) => Promise<unknown> } })
-              .from('profiles_auth_secrets')
+            await (supabase as unknown as {
+              from: (table: string) => {
+                upsert: (val: Record<string, unknown>) => Promise<unknown>
+              }
+            }).from('profiles_auth_secrets')
               .upsert({ 
                 user_id: existingUser.id, 
                 auth_salt: userSalt 
@@ -355,8 +453,11 @@ serve(async (req) => {
 
           // Store auth_salt in the SECURE profiles_auth_secrets table
           try {
-            await (supabase as unknown as { from: (table: string) => { insert: (val: Record<string, unknown>) => Promise<{ error: unknown }> } })
-              .from('profiles_auth_secrets')
+            await (supabase as unknown as {
+              from: (table: string) => {
+                insert: (val: Record<string, unknown>) => Promise<{ error: unknown }>
+              }
+            }).from('profiles_auth_secrets')
               .insert({
                 user_id: userId,
                 auth_salt: userSalt,
@@ -452,12 +553,12 @@ serve(async (req) => {
           });
         }
 
-        // Verify SIWE
+        // Verify SIWE with nonce tracking
         const siweResult = await verifySiweSignature({
           message: siwe.message,
           signature: siwe.signature,
           address: walletAddress,
-        });
+        }, supabase);
 
         if (!siweResult.valid) {
           return safeError(401, 'Authentication failed', `SIWE verification failed: ${siweResult.error}`);
@@ -471,7 +572,7 @@ serve(async (req) => {
           .single();
 
         if (error) {
-          return safeError(500, 'Internal error', error);
+          return safeError(500, 'Failed to update profile', error);
         }
 
         return new Response(JSON.stringify({ success: true, profile }), {
@@ -479,20 +580,16 @@ serve(async (req) => {
         });
       }
 
-      default: {
-        return new Response(JSON.stringify({
-          error: 'Unknown action',
-          availableActions: ['siwe-auth', 'profile', 'update-profile'],
-        }), {
-          status: 400,
+      default:
+        return new Response(JSON.stringify({ error: 'Unknown action' }), {
+          status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
-      }
     }
-  } catch (error: unknown) {
+  } catch (error) {
     return safeError(500, 'Internal error', error);
   }
 });
 
-// Export rate limit helper and config for use by other edge functions
+// Export rate limiting utilities for use by other edge functions
 export { checkUserRateLimitInMemory, checkIpRateLimitInMemory, RATE_LIMITS };

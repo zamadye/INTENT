@@ -710,8 +710,9 @@ serve(async (req) => {
 
         console.log('[CampaignService] Campaign saved successfully');
 
-        // AUTO-GENERATE PROOF RECORD (without smart contract for now)
+        // AUTO-GENERATE PROOF RECORD (pending - awaiting real blockchain minting)
         // This creates a shareable proof URL that can be shared on Twitter
+        // SECURITY FIX: No fake tx_hash - status is 'pending' until real blockchain tx
         const intentFingerprint = generateIntentFingerprint({
           category: IntentCategory.DeFi,
           targetDApps: generationMetadata?.targetDApps || [],
@@ -727,13 +728,12 @@ serve(async (req) => {
             campaign_id: campaign.id,
             user_id: userId,
             wallet_address: walletAddress.toLowerCase(),
-            status: 'minted',
+            status: 'pending', // Changed from 'minted' - awaiting real blockchain tx
             intent_fingerprint: intentFingerprint,
             intent_category: IntentCategory.DeFi,
-            minted_at: new Date().toISOString(),
-            verified_at: new Date().toISOString(),
-            // Generate a pseudo tx hash for display purposes
-            tx_hash: `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`
+            minted_at: null, // Only set after real blockchain minting
+            verified_at: null, // Only set after real verification
+            tx_hash: null // Only set after real blockchain transaction
           })
           .select()
           .single();

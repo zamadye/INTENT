@@ -8,6 +8,48 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting configuration
+const RATE_LIMITS = {
+  'artifact-generate': { requests: 10, windowSeconds: 3600 }, // 10/hour (expensive AI calls)
+};
+
+// In-memory rate limiting for authenticated users
+const userRateLimits = new Map<string, { count: number; windowStart: number }>();
+
+function checkUserRateLimitInMemory(
+  userId: string,
+  endpoint: string,
+  limit: { requests: number; windowSeconds: number }
+): { allowed: boolean; remaining: number; resetAt: Date } {
+  const now = Date.now();
+  const windowStart = Math.floor(now / (limit.windowSeconds * 1000)) * (limit.windowSeconds * 1000);
+  const key = `${endpoint}:${userId}:${windowStart}`;
+  const resetAt = new Date(windowStart + limit.windowSeconds * 1000);
+  
+  // Clean old entries periodically
+  if (Math.random() < 0.01) {
+    const cutoff = now - limit.windowSeconds * 1000 * 2;
+    for (const [k, v] of userRateLimits.entries()) {
+      if (v.windowStart < cutoff) {
+        userRateLimits.delete(k);
+      }
+    }
+  }
+  
+  const existing = userRateLimits.get(key);
+  
+  if (existing) {
+    if (existing.count >= limit.requests) {
+      return { allowed: false, remaining: 0, resetAt };
+    }
+    existing.count++;
+    return { allowed: true, remaining: limit.requests - existing.count, resetAt };
+  } else {
+    userRateLimits.set(key, { count: 1, windowStart });
+    return { allowed: true, remaining: limit.requests - 1, resetAt };
+  }
+}
+
 // Generic error helper - logs details server-side, returns safe message to client
 function safeError(status: number, publicMsg: string, internalDetails?: unknown): Response {
   if (internalDetails) console.error('[ArtifactService] Internal:', internalDetails);
@@ -262,6 +304,31 @@ serve(async (req) => {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
+        }
+
+        // RATE LIMITING: Get user from campaign ownership for rate limiting
+        const { data: campaignOwner } = await supabase
+          .from('campaigns')
+          .select('user_id')
+          .eq('id', campaignId)
+          .single();
+        
+        if (campaignOwner?.user_id) {
+          const rateCheck = checkUserRateLimitInMemory(campaignOwner.user_id, 'artifact-generate', RATE_LIMITS['artifact-generate']);
+          if (!rateCheck.allowed) {
+            console.warn(`[ArtifactService] Rate limit exceeded for user: ${campaignOwner.user_id}`);
+            return new Response(JSON.stringify({ 
+              error: 'Rate limit exceeded. Try again later.',
+              resetAt: rateCheck.resetAt.toISOString()
+            }), {
+              status: 429,
+              headers: { 
+                ...corsHeaders, 
+                'Content-Type': 'application/json',
+                'Retry-After': String(Math.ceil((rateCheck.resetAt.getTime() - Date.now()) / 1000))
+              },
+            });
+          }
         }
 
         // Optional SIWE verification for enhanced security
