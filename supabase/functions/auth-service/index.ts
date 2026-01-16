@@ -8,6 +8,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Rate limiting configuration
+const RATE_LIMITS: Record<string, { requests: number; windowSeconds: number }> = {
+  'siwe-auth': { requests: 10, windowSeconds: 3600 }, // 10/hour
+  'campaign-create': { requests: 20, windowSeconds: 3600 }, // 20/hour
+  'campaign-save': { requests: 30, windowSeconds: 3600 }, // 30/hour
+  'verify-action': { requests: 50, windowSeconds: 3600 }, // 50/hour (RPC calls)
+  'artifact-generate': { requests: 10, windowSeconds: 3600 }, // 10/hour (expensive)
+  'proof-record': { requests: 100, windowSeconds: 3600 }, // 100/hour
+  'proof-mint': { requests: 50, windowSeconds: 3600 }, // 50/hour
+};
+
 // Generic error helper - logs details server-side, returns safe message to client
 function safeError(status: number, publicMsg: string, internalDetails?: unknown): Response {
   if (internalDetails) console.error('[AuthService] Internal:', internalDetails);
@@ -21,6 +32,87 @@ interface SiwePayload {
   message: string;
   signature: string;
   address: string;
+}
+
+interface RateLimitRecord {
+  id: string;
+  request_count: number;
+  window_start: string;
+}
+
+// Rate limiting helper - uses in-memory for simplicity (avoids type issues with new tables)
+// For production, consider using Redis or the rate_limits table with proper typing after regeneration
+const userRateLimits = new Map<string, { count: number; windowStart: number }>();
+
+function checkUserRateLimitInMemory(
+  userId: string,
+  endpoint: string,
+  limit: { requests: number; windowSeconds: number }
+): { allowed: boolean; remaining: number; resetAt: Date } {
+  const now = Date.now();
+  const windowStart = Math.floor(now / (limit.windowSeconds * 1000)) * (limit.windowSeconds * 1000);
+  const key = `${endpoint}:${userId}:${windowStart}`;
+  const resetAt = new Date(windowStart + limit.windowSeconds * 1000);
+  
+  // Clean old entries periodically
+  if (Math.random() < 0.01) {
+    const cutoff = now - limit.windowSeconds * 1000 * 2;
+    for (const [k, v] of userRateLimits.entries()) {
+      if (v.windowStart < cutoff) {
+        userRateLimits.delete(k);
+      }
+    }
+  }
+  
+  const existing = userRateLimits.get(key);
+  
+  if (existing) {
+    if (existing.count >= limit.requests) {
+      return { allowed: false, remaining: 0, resetAt };
+    }
+    existing.count++;
+    return { allowed: true, remaining: limit.requests - existing.count, resetAt };
+  } else {
+    userRateLimits.set(key, { count: 1, windowStart });
+    return { allowed: true, remaining: limit.requests - 1, resetAt };
+  }
+}
+
+// IP-based rate limiting for unauthenticated endpoints (like initial SIWE auth)
+// Uses in-memory tracking since we can't store without a user_id
+const ipRateLimits = new Map<string, { count: number; windowStart: number }>();
+
+function checkIpRateLimitInMemory(
+  ipAddress: string,
+  endpoint: string,
+  limit: { requests: number; windowSeconds: number }
+): { allowed: boolean; remaining: number } {
+  const now = Date.now();
+  const windowStart = Math.floor(now / (limit.windowSeconds * 1000)) * (limit.windowSeconds * 1000);
+  const key = `${endpoint}:${ipAddress}:${windowStart}`;
+  
+  // Clean old entries periodically (every ~1% of requests)
+  if (Math.random() < 0.01) {
+    const cutoff = now - limit.windowSeconds * 1000 * 2;
+    for (const [k, v] of ipRateLimits.entries()) {
+      if (v.windowStart < cutoff) {
+        ipRateLimits.delete(k);
+      }
+    }
+  }
+  
+  const existing = ipRateLimits.get(key);
+  
+  if (existing) {
+    if (existing.count >= limit.requests) {
+      return { allowed: false, remaining: 0 };
+    }
+    existing.count++;
+    return { allowed: true, remaining: limit.requests - existing.count };
+  } else {
+    ipRateLimits.set(key, { count: 1, windowStart });
+    return { allowed: true, remaining: limit.requests - 1 };
+  }
 }
 
 // SIWE verification helper
@@ -86,6 +178,11 @@ serve(async (req) => {
     const pathParts = url.pathname.split('/').filter(Boolean);
     const action = pathParts[pathParts.length - 1] || 'default';
 
+    // Get client IP for rate limiting (unauthenticated endpoints)
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                     req.headers.get('x-real-ip') || 
+                     'unknown';
+
     console.log(`[AuthService] Action: ${action}, Method: ${req.method}`);
 
     switch (action) {
@@ -94,6 +191,20 @@ serve(async (req) => {
           return new Response(JSON.stringify({ error: 'Method not allowed' }), {
             status: 405,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Rate limiting for SIWE auth (IP-based since user isn't authenticated yet)
+        const rateLimit = checkIpRateLimitInMemory(clientIp, 'siwe-auth', RATE_LIMITS['siwe-auth']);
+        if (!rateLimit.allowed) {
+          console.warn(`[AuthService] Rate limit exceeded for IP: ${clientIp.slice(0, 10)}...`);
+          return new Response(JSON.stringify({ error: 'Too many requests. Please try again later.' }), {
+            status: 429,
+            headers: { 
+              ...corsHeaders, 
+              'Content-Type': 'application/json',
+              'Retry-After': '3600'
+            },
           });
         }
 
@@ -124,7 +235,7 @@ serve(async (req) => {
           u => u.email === email || u.user_metadata?.wallet_address === walletAddress
         );
 
-        // Helper function to generate password using per-user salt
+        // Helper function to generate password using per-user salt from secure table
         const generatePassword = async (userSalt: string): Promise<string> => {
           const STATIC_SALT = 'arc_intent_protocol_v1_2026';
           const encoder = new TextEncoder();
@@ -147,25 +258,29 @@ serve(async (req) => {
         let session: { access_token: string; refresh_token: string } | null = null;
 
         if (existingUser) {
-          // User exists - get their auth_salt from profile and sign in
+          // User exists - get their auth_salt from the SECURE profiles_auth_secrets table
           console.log(`[AuthService] Existing user found: ${existingUser.id}`);
           
-          // Fetch existing auth_salt from profile
-          const { data: existingProfile } = await supabase
-            .from('profiles')
+          // Fetch existing auth_salt from the secure secrets table (service_role only)
+          // Use explicit any to bypass type system for new table
+          const { data: existingSecret } = await (supabase as unknown as { from: (table: string) => { select: (cols: string) => { eq: (col: string, val: string) => { maybeSingle: () => Promise<{ data: unknown; error: unknown }> } } } })
+            .from('profiles_auth_secrets')
             .select('auth_salt')
-            .eq('wallet_address', walletAddress)
+            .eq('user_id', existingUser.id)
             .maybeSingle();
           
           // Use existing salt or generate new one if missing (migration case)
-          let userSalt = existingProfile?.auth_salt;
+          const secretData = existingSecret as { auth_salt: string } | null;
+          let userSalt = secretData?.auth_salt;
           if (!userSalt) {
             userSalt = generateRandomSalt();
-            // Store the new salt
-            await supabase
-              .from('profiles')
-              .update({ auth_salt: userSalt })
-              .eq('wallet_address', walletAddress);
+            // Store the new salt in the secure table
+            await (supabase as unknown as { from: (table: string) => { upsert: (val: Record<string, unknown>) => Promise<unknown> } })
+              .from('profiles_auth_secrets')
+              .upsert({ 
+                user_id: existingUser.id, 
+                auth_salt: userSalt 
+              });
           }
           
           const password = await generatePassword(userSalt);
@@ -238,7 +353,19 @@ serve(async (req) => {
 
           session = signInData.session;
 
-          // Create profile for new user with auth_salt
+          // Store auth_salt in the SECURE profiles_auth_secrets table
+          try {
+            await (supabase as unknown as { from: (table: string) => { insert: (val: Record<string, unknown>) => Promise<{ error: unknown }> } })
+              .from('profiles_auth_secrets')
+              .insert({
+                user_id: userId,
+                auth_salt: userSalt,
+              });
+          } catch (secretError) {
+            console.error('[AuthService] Auth secret storage error (non-fatal):', secretError);
+          }
+
+          // Create profile for new user (WITHOUT auth_salt - it's in the secure table now)
           const { error: profileError } = await supabase
             .from('profiles')
             .insert({
@@ -247,7 +374,6 @@ serve(async (req) => {
               username: null,
               campaigns_created: 0,
               nfts_minted: 0,
-              auth_salt: userSalt,
             });
 
           if (profileError) {
@@ -292,7 +418,7 @@ serve(async (req) => {
           });
         }
 
-        // Explicit field selection for profile retrieval (exclude user_id from public response)
+        // Explicit field selection for profile retrieval (no auth_salt - it's in secure table)
         const { data: profile, error } = await supabase
           .from('profiles')
           .select('id, wallet_address, username, campaigns_created, nfts_minted, created_at, updated_at')
@@ -367,3 +493,6 @@ serve(async (req) => {
     return safeError(500, 'Internal error', error);
   }
 });
+
+// Export rate limit helper and config for use by other edge functions
+export { checkUserRateLimitInMemory, checkIpRateLimitInMemory, RATE_LIMITS };

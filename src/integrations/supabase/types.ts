@@ -300,7 +300,6 @@ export type Database = {
       }
       profiles: {
         Row: {
-          auth_salt: string | null
           campaigns_created: number
           created_at: string
           id: string
@@ -311,7 +310,6 @@ export type Database = {
           wallet_address: string
         }
         Insert: {
-          auth_salt?: string | null
           campaigns_created?: number
           created_at?: string
           id?: string
@@ -322,7 +320,6 @@ export type Database = {
           wallet_address: string
         }
         Update: {
-          auth_salt?: string | null
           campaigns_created?: number
           created_at?: string
           id?: string
@@ -331,6 +328,54 @@ export type Database = {
           user_id?: string
           username?: string | null
           wallet_address?: string
+        }
+        Relationships: []
+      }
+      profiles_auth_secrets: {
+        Row: {
+          auth_salt: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          auth_salt: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          auth_salt?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          request_count: number
+          updated_at: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          request_count?: number
+          updated_at?: string
+          user_id: string
+          window_start?: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          request_count?: number
+          updated_at?: string
+          user_id?: string
+          window_start?: string
         }
         Relationships: []
       }
