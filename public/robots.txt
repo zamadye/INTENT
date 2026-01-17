@@ -1,3 +1,6 @@
+# INTENT Protocol - app-intent.lovable.app
+# Official Web3 DApp for Proof of Structured Participation
+
 User-agent: Googlebot
 Allow: /
 
@@ -12,3 +15,10 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+# Sitemap
+Sitemap: https://app-intent.lovable.app/sitemap.xml
+
+# Security: This is the official INTENT Protocol application
+# We never ask for seed phrases or private keys
+# Report phishing attempts to: security@intent.protocol

@@ -7,10 +7,41 @@
     <meta name="description" content="Turn your actions into on-chain proof. Structured intent platform for Arc Network testnet." />
     <meta name="author" content="INTENT Protocol" />
     
-    <!-- Security & Trust Headers -->
+    <!-- Security Headers (HTTP-equiv for static hosting) -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=()" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
+    
+    <!-- Content Security Policy - Strict but Web3 Compatible -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://verify.walletconnect.com https://verify.walletconnect.org;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob: https: http:;
+      connect-src 'self' 
+        https://rpc.testnet.arc.network 
+        https://*.supabase.co 
+        wss://*.supabase.co 
+        https://relay.walletconnect.com 
+        wss://relay.walletconnect.com 
+        https://relay.walletconnect.org 
+        wss://relay.walletconnect.org 
+        https://verify.walletconnect.com 
+        https://verify.walletconnect.org 
+        https://pulse.walletconnect.org
+        https://explorer-api.walletconnect.com
+        https://rpc.walletconnect.com
+        https://rpc.walletconnect.org
+        https://api.web3modal.com
+        https://api.web3modal.org
+        https://image.pollinations.ai
+        https://testnet.arcscan.app;
+      frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org https://secure.walletconnect.com https://secure.walletconnect.org;
+      worker-src 'self' blob:;
+      child-src 'self' blob:;
+    " />
     
     <!-- Web3/DApp Identity Verification -->
     <meta name="application-name" content="INTENT Protocol" />
@@ -21,14 +52,18 @@
     <meta name="robots" content="index, follow" />
     <meta name="rating" content="general" />
     <meta name="classification" content="Web3 DApp, Blockchain" />
+    
+    <!-- Web3 Security Declaration -->
+    <meta name="web3-security" content="no-seed-phrase-collection, no-private-key-storage, wallet-connect-only" />
+    <meta name="dapp-verification" content="official" />
 
     <!-- Open Graph -->
     <meta property="og:title" content="INTENT - Proof of Structured Participation" />
-    <meta property="og:description" content="Turn your actions into on-chain proof. Structured intent platform for Arc Network testnet." />
+    <meta property="og:description" content="Turn your actions into on-chain proof. Structured intent platform for Arc Network testnet. We never ask for your seed phrase." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://app-intent.lovable.app" />
     <meta property="og:site_name" content="INTENT Protocol" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    <meta property="og:image" content="https://app-intent.lovable.app/intent-logo.jpg" />
     <meta property="og:image:alt" content="INTENT Protocol - Web3 Proof of Participation" />
     <meta property="og:locale" content="en_US" />
 
@@ -37,8 +72,8 @@
     <meta name="twitter:site" content="@intentprotocol" />
     <meta name="twitter:creator" content="@intentprotocol" />
     <meta name="twitter:title" content="INTENT - Proof of Structured Participation" />
-    <meta name="twitter:description" content="Turn your actions into on-chain proof on Arc Network." />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    <meta name="twitter:description" content="Turn your actions into on-chain proof on Arc Network. We never ask for your seed phrase." />
+    <meta name="twitter:image" content="https://app-intent.lovable.app/intent-logo.jpg" />
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />

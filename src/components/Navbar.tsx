@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ChevronDown, Copy, ExternalLink, LogOut } from 'lucide-react';
+import { Menu, X, ChevronDown, Copy, ExternalLink, LogOut, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/WalletContext';
 import { JazziconAvatar } from '@/components/JazziconAvatar';
+import { WalletSecurityInfo } from '@/components/WalletSecurityInfo';
 import toast from 'react-hot-toast';
 import intentLogo from '@/assets/intent-logo.jpg';
 
@@ -95,22 +96,32 @@ export const Navbar: React.FC = () => {
           {/* Wallet Section */}
           <div className="flex items-center gap-3">
             {!isConnected ? (
-              <Button
-                variant="wallet"
-                size="default"
-                onClick={connect}
-                disabled={isConnecting}
-                className="hidden sm:flex"
-              >
-                {isConnecting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  'Connect Wallet'
-                )}
-              </Button>
+              <div className="flex items-center gap-2">
+                <WalletSecurityInfo 
+                  trigger={
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-emerald-400">
+                      <Shield className="w-4 h-4" />
+                    </Button>
+                  }
+                />
+                <Button
+                  variant="wallet"
+                  size="default"
+                  onClick={connect}
+                  disabled={isConnecting}
+                  className="hidden sm:flex"
+                  title="Connect wallet to use INTENT - We never ask for your seed phrase"
+                >
+                  {isConnecting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    'Connect Wallet'
+                  )}
+                </Button>
+              </div>
             ) : !isCorrectNetwork ? (
               <Button
                 variant="destructive"

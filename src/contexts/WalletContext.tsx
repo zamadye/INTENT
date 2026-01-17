@@ -219,7 +219,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         address,
         chainId: arcTestnet.id,
         nonce,
-        statement: 'Sign this message to authenticate with INTENT and prove ownership of your wallet.',
+        // Clear, transparent statement that explains what the signature is for
+        statement: 'Sign this message to prove you own this wallet and authenticate with INTENT Protocol. This signature does NOT authorize any transactions or token transfers. We never ask for your seed phrase.',
         expirationMinutes: SESSION_EXPIRY_MINUTES,
         resources: [`${window.location.origin}/api`],
       });
