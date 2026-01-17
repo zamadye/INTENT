@@ -268,8 +268,10 @@ serve(async (req) => {
 
     console.log(`[AuthService] Action: ${action}, Method: ${req.method}`);
 
-    // Periodically clean up expired nonces (1% chance per request)
-    if (Math.random() < 0.01) {
+    // Deterministic nonce cleanup on every 100th request based on timestamp
+    // This provides predictable cleanup without probabilistic skipping
+    const shouldCleanup = Date.now() % 100 === 0;
+    if (shouldCleanup) {
       cleanupExpiredNonces(supabase).catch(err => 
         console.error('[AuthService] Background nonce cleanup failed:', err)
       );
