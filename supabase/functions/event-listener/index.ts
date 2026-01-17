@@ -180,6 +180,14 @@ function safeError(status: number, publicMessage: string, internalError?: unknow
   );
 }
 
+// Rate limiting for DoS protection (in-memory, resets on cold start)
+const lastSyncTime = { global: 0 };
+const SYNC_COOLDOWN_MS = 60000; // 1 minute between syncs
+
+// Maximum blocks to prevent expensive RPC calls
+const MAX_BLOCKS = 10000;
+const DEFAULT_BLOCKS = 1000;
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -194,6 +202,14 @@ Deno.serve(async (req) => {
       return safeError(500, 'Server configuration error');
     }
 
+    // SECURITY: Require service role authentication
+    // This endpoint should only be called by cron jobs or internal services
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || authHeader !== `Bearer ${supabaseServiceKey}`) {
+      console.warn('[EventListener] Unauthorized access attempt');
+      return safeError(401, 'Authentication required');
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Parse request
@@ -204,8 +220,25 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case 'sync': {
-        // Sync events from the last N blocks
-        const blocksToSync = parseInt(url.searchParams.get('blocks') || '1000');
+        // Rate limiting check
+        const now = Date.now();
+        if (lastSyncTime.global && now - lastSyncTime.global < SYNC_COOLDOWN_MS) {
+          const waitTime = Math.ceil((SYNC_COOLDOWN_MS - (now - lastSyncTime.global)) / 1000);
+          return safeError(429, `Rate limit exceeded. Try again in ${waitTime} seconds.`);
+        }
+        lastSyncTime.global = now;
+
+        // Validate and parse blocks parameter
+        const blocksParam = url.searchParams.get('blocks') || String(DEFAULT_BLOCKS);
+        const blocksToSync = parseInt(blocksParam, 10);
+        
+        // Input validation
+        if (isNaN(blocksToSync)) {
+          return safeError(400, 'Invalid blocks parameter - must be a number');
+        }
+        if (blocksToSync < 1 || blocksToSync > MAX_BLOCKS) {
+          return safeError(400, `Blocks parameter must be between 1 and ${MAX_BLOCKS}`);
+        }
         
         const latestBlock = await getLatestBlockNumber();
         const fromBlock = Math.max(0, latestBlock - blocksToSync);
