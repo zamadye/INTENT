@@ -188,6 +188,71 @@ const SYNC_COOLDOWN_MS = 60000; // 1 minute between syncs
 const MAX_BLOCKS = 1000;  // Reduced from 10000 for RPC cost protection
 const DEFAULT_BLOCKS = 500;  // Reduced from 1000 for default query efficiency
 
+// HMAC signature expiry (5 minutes)
+const SIGNATURE_EXPIRY_MS = 300000;
+
+/**
+ * Verify HMAC signature for secure authentication
+ * Prevents replay attacks with timestamp validation
+ */
+async function verifyHmacSignature(
+  timestamp: string,
+  signature: string,
+  requestPath: string,
+  secretKey: string
+): Promise<boolean> {
+  try {
+    // Validate timestamp freshness (prevent replay attacks)
+    const timestampMs = parseInt(timestamp, 10);
+    if (isNaN(timestampMs)) {
+      console.warn('[EventListener] Invalid timestamp format');
+      return false;
+    }
+    
+    const now = Date.now();
+    if (Math.abs(now - timestampMs) > SIGNATURE_EXPIRY_MS) {
+      console.warn('[EventListener] Signature expired or timestamp too far in future');
+      return false;
+    }
+    
+    // Import key for HMAC
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secretKey);
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify']
+    );
+    
+    // Create message to sign: timestamp:path
+    const message = `${timestamp}:${requestPath}`;
+    const messageData = encoder.encode(message);
+    
+    // Compute expected signature
+    const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+    const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    // Timing-safe comparison
+    if (signature.length !== expectedSignature.length) {
+      return false;
+    }
+    
+    let result = 0;
+    for (let i = 0; i < signature.length; i++) {
+      result |= signature.charCodeAt(i) ^ expectedSignature.charCodeAt(i);
+    }
+    
+    return result === 0;
+  } catch (error) {
+    console.error('[EventListener] HMAC verification error:', error);
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -202,18 +267,42 @@ Deno.serve(async (req) => {
       return safeError(500, 'Server configuration error');
     }
 
-    // SECURITY: Require service role authentication
-    // This endpoint should only be called by cron jobs or internal services
+    // Parse request URL for path extraction
+    const url = new URL(req.url);
+    const requestPath = url.pathname + url.search;
+
+    // SECURITY: HMAC-based authentication with timestamp validation
+    // This prevents replay attacks and is more secure than bearer token comparison
+    const timestamp = req.headers.get('X-Timestamp');
+    const signature = req.headers.get('X-Signature');
+    
+    // Also accept legacy bearer token for backward compatibility during transition
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader || authHeader !== `Bearer ${supabaseServiceKey}`) {
+    const hasLegacyAuth = authHeader === `Bearer ${supabaseServiceKey}`;
+    
+    // Validate authentication (HMAC preferred, legacy bearer as fallback)
+    let isAuthenticated = false;
+    
+    if (timestamp && signature) {
+      // Use HMAC signature verification (preferred)
+      isAuthenticated = await verifyHmacSignature(timestamp, signature, requestPath, supabaseServiceKey);
+      if (!isAuthenticated) {
+        console.warn('[EventListener] HMAC signature verification failed');
+      }
+    } else if (hasLegacyAuth) {
+      // Legacy bearer token (will be deprecated)
+      console.warn('[EventListener] Using legacy bearer token authentication - please migrate to HMAC');
+      isAuthenticated = true;
+    }
+    
+    if (!isAuthenticated) {
       console.warn('[EventListener] Unauthorized access attempt');
-      return safeError(401, 'Authentication required');
+      return safeError(401, 'Authentication required. Provide X-Timestamp and X-Signature headers.');
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse request
-    const url = new URL(req.url);
+    // Get action from already-parsed URL
     const action = url.searchParams.get('action') || 'sync';
 
     console.log(`[EventListener] Action: ${action}`);
