@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Comprehensive Arc Network knowledge base
+// Comprehensive Arc Network knowledge base with expanded ecosystem data
 const ARC_KNOWLEDGE_BASE = {
   network: {
     name: "Arc Network",
@@ -39,72 +39,123 @@ const ARC_KNOWLEDGE_BASE = {
       name: "Stable Fee Architecture",
       description: "Transaction fees are denominated in USDC with predictable pricing.",
       benefits: ["Budget certainty", "No fee spikes", "Business-friendly"],
+    },
+    "opt-in-privacy": {
+      name: "Opt-In Privacy",
+      description: "Privacy-preserving transactions when needed, with full auditability for compliance.",
+      benefits: ["Regulatory compliance", "User choice", "Enterprise ready"],
     }
   },
   ecosystem: {
-    partners: ["Circle", "Coinbase", "BlackRock", "Chainlink", "Alchemy", "Aave", "Across", "Deutsche Bank"],
-    useCases: ["Global payments", "FX settlements", "Capital markets", "Stablecoin DeFi", "Tokenized assets (RWA)"]
+    partners: ["Circle", "Coinbase", "BlackRock", "Chainlink", "Alchemy", "Aave", "Across", "Deutsche Bank", "HSBC", "Societe Generale", "BNY", "Commerzbank", "Axelar", "LayerZero"],
+    useCases: ["Global payments", "FX settlements", "Capital markets", "Stablecoin DeFi", "Tokenized assets (RWA)", "Cross-border remittances", "Trade finance", "Treasury management"]
   },
-  hashtags: ["#ArcNetwork", "#USDC", "#DeFi", "#Web3", "#Stablecoins"]
+  hashtags: ["#ArcNetwork", "#USDC", "#DeFi", "#Web3", "#Stablecoins", "#RWA", "#TradFi", "#CryptoFinance"]
 };
 
-// Visual style guides for image generation
+// Expanded visual style guides with more variety
 const IMAGE_STYLE_GUIDES: Record<string, string> = {
-  // Simplified UI styles
-  tech: "clean minimalist tech aesthetic, precise geometric shapes, electric cyan accents, white and deep blue palette, professional and polished, subtle grid patterns, floating UI elements",
-  vibrant: "neon-lit cyberpunk aesthetic, holographic displays, cyan and magenta gradients, dark tech environment, glowing blockchain visualizations, energy streams",
-  cosmic: "deep cosmic space backdrop, nebulae and stars, blockchain constellation patterns, ethereal glow, sci-fi grandeur, orbital trajectories, interstellar theme",
-
-  // Backwards-compatible style aliases (if clients send these)
-  minimalist: "clean minimalist tech aesthetic, precise geometric shapes, electric cyan accents, white and deep blue palette, professional and polished, subtle grid patterns, floating UI elements",
-  blueprint: "technical blueprint style, deep space blue background, white wireframe drawings, engineering grid overlay, cyan highlights, precise schematic lines",
-  cyberpunk: "neon-lit cyberpunk aesthetic, holographic displays, cyan and magenta gradients, dark tech environment, glowing blockchain visualizations, energy streams",
-  gradient: "abstract gradient art, flowing colors from deep blue to cyan to teal, organic shapes, ethereal glow, premium marketing lighting",
-  space: "deep cosmic space backdrop, nebulae and stars, blockchain constellation patterns, ethereal glow, sci-fi grandeur, orbital trajectories, interstellar theme",
+  // Primary styles
+  tech: "clean minimalist tech aesthetic, precise geometric shapes, electric cyan (#00D9FF) accents, deep space blue (#0A0E27) background, professional and polished, subtle hexagonal grid patterns, floating holographic UI elements, soft ambient glow",
+  vibrant: "neon-lit cyberpunk aesthetic, holographic displays with depth, cyan and magenta gradients, dark futuristic environment, glowing blockchain node visualizations, energy streams flowing through circuits, volumetric lighting",
+  cosmic: "deep cosmic space backdrop with distant galaxies, nebulae and stellar formations, blockchain constellation patterns connecting nodes, ethereal glow, sci-fi grandeur, orbital trajectories around a central Arc logo form, interstellar data streams",
+  
+  // Extended variety styles
+  minimalist: "ultra-clean Swiss design aesthetic, generous whitespace, single cyan accent line, typography-focused, architectural precision, subtle shadows, glass morphism elements",
+  blueprint: "technical blueprint style on deep navy background, white and cyan wireframe drawings, engineering grid overlay, precise schematic lines, annotation markers, technical callouts",
+  cyberpunk: "rain-soaked neon cityscape, holographic billboards, pink and cyan color palette, chrome reflections, digital rain effects, corporate megastructures, blade runner atmosphere",
+  gradient: "abstract gradient art, flowing organic shapes transitioning from deep purple through electric blue to vibrant cyan, liquid metal aesthetics, premium product photography lighting, subtle noise texture",
+  space: "vast cosmic void with supernova remnants, arc of light connecting distant stars, data packets visualized as shooting stars, deep field astronomy aesthetic, cosmic dust particles",
+  
+  // New variety styles
+  neon: "dark environment with intense neon tube lighting, pink/cyan/purple color scheme, reflective wet surfaces, 80s retro-futurism, synthwave aesthetic, geometric neon shapes",
+  matrix: "digital rain of green/cyan code, matrix-style data visualization, dark void background, glowing symbols, binary streams forming patterns, hacker aesthetic",
+  crystal: "crystalline structures with internal light refraction, faceted geometric forms, prismatic color dispersion, frozen light aesthetic, ice palace vibes, clarity and precision",
+  aurora: "northern lights color palette, flowing bands of green/purple/pink light, arctic twilight sky, ethereal and mystical atmosphere, particle effects, organic movement",
+  circuit: "printed circuit board macro photography style, copper traces with cyan LED glow, silicon wafer patterns, microscopic tech aesthetic, solder points as nodes",
+  quantum: "quantum computing aesthetic, superposition visualizations, entangled particle paths, probability clouds, Schrödinger-inspired uncertainty, deep blue with white particles",
+  ocean: "deep ocean bioluminescence, underwater data cables glowing, abyssal darkness with cyan creatures, pressure depth aesthetic, mysterious and vast",
+  solar: "solar flare and corona visualization, plasma arcs, intense orange transitioning to cool space, fusion energy aesthetic, power and energy theme",
 };
 
-// Campaign type context
+// Expanded campaign type context with more variety
 const CAMPAIGN_CONTEXT: Record<string, string> = {
-  "product-launch": "exciting product announcement with anticipation",
-  "community-event": "community milestone celebration",
-  "educational": "accessible educational content about technology",
-  "meme-campaign": "fun shareable crypto-native humor",
-  "defi-promotion": "DeFi opportunities with stable fees and fast finality",
-  "partnership": "ecosystem growth and institutional adoption",
-  "testnet": "testnet participation encouragement",
+  "product-launch": "exciting product announcement building anticipation and FOMO",
+  "community-event": "community milestone celebration with gratitude and excitement",
+  "educational": "accessible educational content breaking down complex technology",
+  "meme-campaign": "fun shareable crypto-native humor with viral potential",
+  "defi-promotion": "DeFi opportunities highlighting stable fees and instant finality",
+  "partnership": "ecosystem growth celebrating institutional adoption",
+  "testnet": "testnet participation encouragement with builder energy",
+  "trading": "trading activity highlight showcasing volume and efficiency",
+  "yield": "yield farming opportunity with risk-aware messaging",
+  "bridge": "cross-chain bridging made simple with fast finality",
+  "nft": "digital collectible or proof-of-participation moment",
+  "governance": "community voice and DAO participation",
+  "developer": "builder-focused technical achievement",
+  "milestone": "protocol or user milestone celebration",
 };
 
-// Tone modifiers
+// Expanded tone modifiers
 const TONE_GUIDES: Record<string, string> = {
-  professional: "polished corporate language for institutional audiences",
-  hype: "energetic exciting language with strategic emojis",
-  educational: "clear jargon-free explanations",
-  degen: "crypto-native slang (gm, wagmi) and culture references",
-  technical: "specific technical details and developer focus",
+  professional: "polished corporate language for institutional audiences, measured confidence",
+  hype: "energetic exciting language with strategic emojis 🚀⚡, FOMO-inducing",
+  educational: "clear jargon-free explanations, patient and thorough",
+  degen: "crypto-native slang (gm, wagmi, lfg, ser), culture references, based energy",
+  technical: "specific technical details and developer focus, precise terminology",
+  chill: "relaxed casual tone, conversational, friendly vibes",
+  bold: "strong confident statements, declarative, alpha energy",
+  minimal: "extremely concise, powerful single statements, less is more",
+  storytelling: "narrative arc, journey framing, personal experience",
+  urgent: "time-sensitive, don't miss out, act now energy",
 };
 
-// DApp link registry (keep small + deterministic; only real URLs)
-const DAPP_REGISTRY: Record<string, { name: string; url: string }> = {
-  arcflow: { name: "ArcFlow Finance", url: "https://arcflow.finance" },
-  aave: { name: "Aave", url: "https://aave.com" },
-  maple: { name: "Maple", url: "https://maple.finance" },
-  morpho: { name: "Morpho", url: "https://morpho.org" },
-  centrifuge: { name: "Centrifuge", url: "https://centrifuge.io" },
-  superform: { name: "Superform", url: "https://superform.xyz" },
-  securitize: { name: "Securitize", url: "https://securitize.io" },
-  usyc: { name: "USYC (Circle)", url: "https://circle.com" },
-  across: { name: "Across Protocol", url: "https://across.to" },
-  stargate: { name: "Stargate", url: "https://stargate.finance" },
-  wormhole: { name: "Wormhole", url: "https://wormhole.com" },
-  alchemy: { name: "Alchemy", url: "https://alchemy.com" },
-  chainlink: { name: "Chainlink", url: "https://chain.link" },
-  thirdweb: { name: "thirdweb", url: "https://thirdweb.com" },
-  blockdaemon: { name: "Blockdaemon", url: "https://blockdaemon.com" },
-  blockscout: { name: "Blockscout", url: "https://testnet.arcscan.app" },
-  metamask: { name: "MetaMask", url: "https://metamask.io" },
-  rainbow: { name: "Rainbow", url: "https://rainbow.me" },
-  privy: { name: "Privy", url: "https://privy.io" },
-  "coinbase-wallet": { name: "Coinbase Wallet", url: "https://wallet.coinbase.com" },
+// Expanded DApp link registry with real Arc ecosystem partners
+const DAPP_REGISTRY: Record<string, { name: string; url: string; category: string }> = {
+  // DeFi Core
+  arcflow: { name: "ArcFlow Finance", url: "https://arcflow.finance", category: "DeFi" },
+  aave: { name: "Aave", url: "https://aave.com", category: "Lending" },
+  maple: { name: "Maple Finance", url: "https://maple.finance", category: "Lending" },
+  morpho: { name: "Morpho", url: "https://morpho.org", category: "Lending" },
+  
+  // RWA & Tokenization
+  centrifuge: { name: "Centrifuge", url: "https://centrifuge.io", category: "RWA" },
+  securitize: { name: "Securitize", url: "https://securitize.io", category: "RWA" },
+  superform: { name: "Superform", url: "https://superform.xyz", category: "Yield" },
+  usyc: { name: "Circle USYC", url: "https://circle.com", category: "Yield" },
+  
+  // Bridges & Cross-chain
+  across: { name: "Across Protocol", url: "https://across.to", category: "Bridge" },
+  stargate: { name: "Stargate Finance", url: "https://stargate.finance", category: "Bridge" },
+  wormhole: { name: "Wormhole", url: "https://wormhole.com", category: "Bridge" },
+  layerzero: { name: "LayerZero", url: "https://layerzero.network", category: "Bridge" },
+  axelar: { name: "Axelar", url: "https://axelar.network", category: "Bridge" },
+  
+  // Infrastructure
+  alchemy: { name: "Alchemy", url: "https://alchemy.com", category: "Infrastructure" },
+  chainlink: { name: "Chainlink", url: "https://chain.link", category: "Oracles" },
+  thirdweb: { name: "thirdweb", url: "https://thirdweb.com", category: "Dev Tools" },
+  blockdaemon: { name: "Blockdaemon", url: "https://blockdaemon.com", category: "Infrastructure" },
+  blockscout: { name: "ArcScan", url: "https://testnet.arcscan.app", category: "Explorer" },
+  tenderly: { name: "Tenderly", url: "https://tenderly.co", category: "Dev Tools" },
+  drpc: { name: "dRPC", url: "https://drpc.org", category: "RPC" },
+  quicknode: { name: "QuickNode", url: "https://quicknode.com", category: "RPC" },
+  
+  // Wallets
+  metamask: { name: "MetaMask", url: "https://metamask.io", category: "Wallet" },
+  rainbow: { name: "Rainbow", url: "https://rainbow.me", category: "Wallet" },
+  privy: { name: "Privy", url: "https://privy.io", category: "Wallet" },
+  "coinbase-wallet": { name: "Coinbase Wallet", url: "https://wallet.coinbase.com", category: "Wallet" },
+  fireblocks: { name: "Fireblocks", url: "https://fireblocks.com", category: "Custody" },
+  
+  // Payments
+  ramp: { name: "Ramp Network", url: "https://ramp.network", category: "Payments" },
+  nuvei: { name: "Nuvei", url: "https://nuvei.com", category: "Payments" },
+  
+  // Arc Testnet specific (from arcindex.xyz)
+  stablestake: { name: "StableStake Protocol", url: "https://arcindex.xyz", category: "DeFi" },
+  arcinteractionhub: { name: "ARC Interaction Hub", url: "https://arcindex.xyz", category: "Tools" },
+  arcagentpay: { name: "ArcAgentPay", url: "https://arcindex.xyz", category: "Payments" },
 };
 
 function extractUrls(text: string): string[] {
@@ -121,7 +172,7 @@ function resolveDApps(targetDApps: unknown): Array<{ id: string; name: string; u
     })
     .filter(Boolean) as Array<{ id: string; name: string; url: string }>;
 
-  // Deterministic fallback
+  // Deterministic fallback with variety
   if (resolved.length >= 2) return resolved;
   return [
     { id: "arcflow", name: DAPP_REGISTRY.arcflow.name, url: DAPP_REGISTRY.arcflow.url },

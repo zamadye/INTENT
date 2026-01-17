@@ -8,11 +8,13 @@ import { WagmiProvider } from "wagmi";
 import { config } from "@/lib/wagmi";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { AccessLevelProvider } from "@/contexts/AccessLevelContext";
+import { ChainGuard } from "@/components/ChainGuard";
 import Index from "./pages/Index";
 import CreateCampaign from "./pages/CreateCampaign";
 import Proofs from "./pages/Proofs";
 import Dashboard from "./pages/Dashboard";
 import ShareRedirect from "./pages/ShareRedirect";
+import WalletDiagnostics from "./pages/WalletDiagnostics";
 import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
@@ -37,18 +39,22 @@ const App = () => {
               }}
             />
             <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/create" element={<CreateCampaign />} />
-                <Route path="/proofs" element={<Proofs />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                {/* Share link redirect - /p/:id -> /create */}
-                <Route path="/p/:id" element={<ShareRedirect />} />
-                {/* Legacy route redirects */}
-                <Route path="/marketplace" element={<Proofs />} />
-                <Route path="/gallery" element={<Proofs />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
+              <ChainGuard blocking={false}>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/create" element={<CreateCampaign />} />
+                  <Route path="/proofs" element={<Proofs />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  {/* Share link redirect - /p/:id -> /create */}
+                  <Route path="/p/:id" element={<ShareRedirect />} />
+                  {/* Wallet diagnostics for debugging wallet warnings */}
+                  <Route path="/wallet-diagnostics" element={<WalletDiagnostics />} />
+                  {/* Legacy route redirects */}
+                  <Route path="/marketplace" element={<Proofs />} />
+                  <Route path="/gallery" element={<Proofs />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </ChainGuard>
             </BrowserRouter>
           </AccessLevelProvider>
         </WalletProvider>
