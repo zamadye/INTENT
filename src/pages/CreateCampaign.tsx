@@ -33,6 +33,9 @@ export type { GeneratedCampaign } from '@/hooks/useCampaignGeneration';
 // Flow Steps
 type FlowStep = 'tasks' | 'generate' | 'preview' | 'share';
 
+// DEBUG FLAG: Set to true to skip task verification and go straight to generate
+const DEBUG_SKIP_VERIFICATION = true;
+
 const CreateCampaign: React.FC = () => {
   const { isConnected, address, connect, isConnecting, isCorrectNetwork, switchNetwork } = useWallet();
   const { accessLevel, refreshAccessLevel } = useAccessLevel();
@@ -47,8 +50,17 @@ const CreateCampaign: React.FC = () => {
     isCompleting
   } = useCampaignGeneration();
 
-  const [currentStep, setCurrentStep] = useState<FlowStep>('tasks');
-  const [taskContext, setTaskContext] = useState<ReturnType<typeof getTaskContextForCaption> | null>(null);
+  // Skip straight to 'generate' step if debug mode is enabled
+  const [currentStep, setCurrentStep] = useState<FlowStep>(DEBUG_SKIP_VERIFICATION ? 'generate' : 'tasks');
+  const [taskContext, setTaskContext] = useState<ReturnType<typeof getTaskContextForCaption> | null>(
+    // Mock task context for debug mode
+    DEBUG_SKIP_VERIFICATION ? {
+      dapps: ['Arc Swap', 'Arc Bridge'],
+      actions: ['Swap', 'Bridge'],
+      categories: ['DeFi Protocols'],
+      dappUrls: ['https://swap.arc.dev', 'https://bridge.arc.dev'],
+    } : null
+  );
   const [completedCampaignId, setCompletedCampaignId] = useState<string | null>(null);
   const [showPreviewInline, setShowPreviewInline] = useState(false);
 
