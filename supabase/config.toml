@@ -64,3 +64,9 @@ verify_jwt = false
 
 [functions.event-listener]
 verify_jwt = false
+
+[functions.badge-service]
+verify_jwt = false
+
+[functions.cleanup-nonces]
+verify_jwt = false
