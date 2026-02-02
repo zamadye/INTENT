@@ -68,6 +68,143 @@ export type Database = {
         }
         Relationships: []
       }
+      badge_events: {
+        Row: {
+          created_at: string
+          event_data: Json
+          event_type: string
+          id: string
+          processed: boolean
+          processed_at: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          event_data?: Json
+          event_type: string
+          id?: string
+          processed?: boolean
+          processed_at?: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          event_data?: Json
+          event_type?: string
+          id?: string
+          processed?: boolean
+          processed_at?: string | null
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      badge_unlocks: {
+        Row: {
+          badge_id: string
+          created_at: string
+          display_order: number | null
+          id: string
+          is_displayed: boolean
+          proof_data: Json | null
+          trigger_event: string | null
+          trigger_tx_hash: string | null
+          unlocked_at: string
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          badge_id: string
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          is_displayed?: boolean
+          proof_data?: Json | null
+          trigger_event?: string | null
+          trigger_tx_hash?: string | null
+          unlocked_at?: string
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          badge_id?: string
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          is_displayed?: boolean
+          proof_data?: Json | null
+          trigger_event?: string | null
+          trigger_tx_hash?: string | null
+          unlocked_at?: string
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "badge_unlocks_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      badges: {
+        Row: {
+          created_at: string
+          criteria: Json
+          description: string
+          event_window_end: string | null
+          event_window_start: string | null
+          id: string
+          is_active: boolean
+          is_progression: boolean
+          layer: string
+          name: string
+          progression_order: number | null
+          rarity: string
+          slug: string
+          updated_at: string
+          visual_config: Json
+        }
+        Insert: {
+          created_at?: string
+          criteria?: Json
+          description: string
+          event_window_end?: string | null
+          event_window_start?: string | null
+          id?: string
+          is_active?: boolean
+          is_progression?: boolean
+          layer: string
+          name: string
+          progression_order?: number | null
+          rarity: string
+          slug: string
+          updated_at?: string
+          visual_config?: Json
+        }
+        Update: {
+          created_at?: string
+          criteria?: Json
+          description?: string
+          event_window_end?: string | null
+          event_window_start?: string | null
+          id?: string
+          is_active?: boolean
+          is_progression?: boolean
+          layer?: string
+          name?: string
+          progression_order?: number | null
+          rarity?: string
+          slug?: string
+          updated_at?: string
+          visual_config?: Json
+        }
+        Relationships: []
+      }
       campaign_participations: {
         Row: {
           campaign_id: string | null
@@ -456,6 +593,63 @@ export type Database = {
           expires_at?: string
           nonce?: string
           used_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      user_badge_progress: {
+        Row: {
+          consecutive_days: number
+          created_at: string
+          current_identity_badge: string | null
+          id: string
+          intent_score: number
+          last_active_date: string | null
+          max_consecutive_days: number
+          protocols_interacted: string[]
+          social_shares: number
+          total_engagement: number
+          total_transactions: number
+          unique_protocols: number
+          updated_at: string
+          user_id: string
+          voice_state: number
+          wallet_address: string
+        }
+        Insert: {
+          consecutive_days?: number
+          created_at?: string
+          current_identity_badge?: string | null
+          id?: string
+          intent_score?: number
+          last_active_date?: string | null
+          max_consecutive_days?: number
+          protocols_interacted?: string[]
+          social_shares?: number
+          total_engagement?: number
+          total_transactions?: number
+          unique_protocols?: number
+          updated_at?: string
+          user_id: string
+          voice_state?: number
+          wallet_address: string
+        }
+        Update: {
+          consecutive_days?: number
+          created_at?: string
+          current_identity_badge?: string | null
+          id?: string
+          intent_score?: number
+          last_active_date?: string | null
+          max_consecutive_days?: number
+          protocols_interacted?: string[]
+          social_shares?: number
+          total_engagement?: number
+          total_transactions?: number
+          unique_protocols?: number
+          updated_at?: string
+          user_id?: string
+          voice_state?: number
           wallet_address?: string
         }
         Relationships: []

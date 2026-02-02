@@ -13,6 +13,8 @@ import Index from "./pages/Index";
 import CreateCampaign from "./pages/CreateCampaign";
 import Proofs from "./pages/Proofs";
 import Dashboard from "./pages/Dashboard";
+import Profile from "./pages/Profile";
+import Badges from "./pages/Badges";
 import ShareRedirect from "./pages/ShareRedirect";
 import WalletDiagnostics from "./pages/WalletDiagnostics";
 import NotFound from "./pages/NotFound";
@@ -45,6 +47,8 @@ const App = () => {
                   <Route path="/create" element={<CreateCampaign />} />
                   <Route path="/proofs" element={<Proofs />} />
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/badges" element={<Badges />} />
                   {/* Share link redirect - /p/:id -> /create */}
                   <Route path="/p/:id" element={<ShareRedirect />} />
                   {/* Wallet diagnostics for debugging wallet warnings */}

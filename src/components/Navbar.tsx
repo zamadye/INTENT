@@ -10,7 +10,8 @@ import toast from 'react-hot-toast';
 import intentLogo from '@/assets/intent-logo.jpg';
 
 const navLinks = [
-  { href: '/proofs', label: 'Proofs' },
+  { href: '/profile', label: 'Profile' },
+  { href: '/badges', label: 'Badges' },
   { href: '/create', label: 'Create' },
   { href: '/dashboard', label: 'Dashboard' },
 ];
@@ -158,12 +159,12 @@ export const Navbar: React.FC = () => {
                       className="absolute right-0 mt-2 w-56 glass rounded-xl border border-border/50 shadow-xl overflow-hidden"
                     >
                       <Link
-                        to="/dashboard"
+                        to="/profile"
                         className="flex items-center gap-2 px-4 py-3 text-sm hover:bg-secondary transition-colors"
                         onClick={() => setIsDropdownOpen(false)}
                       >
                         <ExternalLink className="w-4 h-4" />
-                        View Dashboard
+                        View Profile
                       </Link>
                       <button
                         onClick={copyAddress}
